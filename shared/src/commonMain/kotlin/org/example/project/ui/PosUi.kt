@@ -1197,6 +1197,9 @@ fun ReturnDialog(viewModel: PosViewModel, onDismiss: () -> Unit) {
     val foundSales by viewModel.searchSales(ticketSearchQuery).collectAsState(emptyList())
     var selectedSale by remember { mutableStateOf<Sale?>(null) }
     
+    // Nueva lógica para búsqueda de productos manual
+    val foundProducts by viewModel.searchProductsForReturn(productSearchQuery).collectAsState(emptyList())
+    
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
 
@@ -1209,115 +1212,153 @@ fun ReturnDialog(viewModel: PosViewModel, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text("Devolución / Cambio de Producto", fontWeight = FontWeight.Black) },
         text = {
-            Column(modifier = Modifier.width(500.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                // SECCIÓN 1: BUSCAR TICKET
-                Column {
-                    Text("1. BUSCAR TICKET POR ID (Ej: 001)", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    OutlinedTextField(
-                        value = ticketSearchQuery,
-                        onValueChange = { 
-                            ticketSearchQuery = it 
-                            selectedSale = null // Resetear al escribir
-                        },
-                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                        placeholder = { Text("Escribe parte del folio...") },
-                        leadingIcon = { Icon(Icons.Default.Receipt, null) },
-                        singleLine = true
-                    )
-                }
-
-                // LISTA DE TICKETS ENCONTRADOS
-                if (ticketSearchQuery.length >= 2 && selectedSale == null) {
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))) {
-                        LazyColumn(modifier = Modifier.heightIn(max = 150.dp)) {
-                            items(foundSales) { sale ->
-                                ListItem(
-                                    headlineContent = { Text("Ticket: ${sale.id}", fontWeight = FontWeight.Bold) },
-                                    supportingContent = { Text(formatTimestamp(sale.timestamp)) },
-                                    trailingContent = {
-                                        TextButton(onClick = { 
-                                            scope.launch {
-                                                val fullSale = viewModel.getSaleById(sale.id)
-                                                selectedSale = fullSale
-                                            }
-                                        }) { Text("SELECCIONAR") }
-                                    },
-                                    modifier = Modifier.clickable { 
-                                        scope.launch {
-                                            selectedSale = viewModel.getSaleById(sale.id)
-                                        }
-                                    }
-                                )
-                                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.2f))
-                            }
-                        }
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val isSmall = maxWidth < 500.dp
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // SECCIÓN 1: BUSCAR TICKET
+                    Column {
+                        Text("1. BUSCAR TICKET POR ID (Ej: 001)", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        OutlinedTextField(
+                            value = ticketSearchQuery,
+                            onValueChange = { 
+                                ticketSearchQuery = it 
+                                selectedSale = null // Resetear al escribir
+                            },
+                            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                            placeholder = { Text("Escribe parte del folio...") },
+                            leadingIcon = { Icon(Icons.Default.Receipt, null) },
+                            singleLine = true
+                        )
                     }
-                }
 
-                // PRODUCTOS DEL TICKET SELECCIONADO
-                if (selectedSale != null) {
-                    Surface(color = Color(0xFFE3F2FD), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(8.dp)) {
-                            Text("Productos del ticket:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                                items(selectedSale!!.items) { item ->
+                    // LISTA DE TICKETS ENCONTRADOS
+                    if (ticketSearchQuery.length >= 2 && selectedSale == null) {
+                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))) {
+                            LazyColumn(modifier = Modifier.heightIn(max = 150.dp)) {
+                                items(foundSales) { sale ->
                                     ListItem(
-                                        headlineContent = { Text(item.productName) },
-                                        supportingContent = { Text("${item.quantity} x $${item.priceAtSale.formatPrice()}") },
+                                        headlineContent = { Text("Ticket: ${sale.id}", fontWeight = FontWeight.Bold, style = if(isSmall) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyLarge) },
+                                        supportingContent = { Text(formatTimestamp(sale.timestamp), style = MaterialTheme.typography.labelSmall) },
                                         trailingContent = {
-                                            Button(onClick = {
+                                            TextButton(onClick = { 
                                                 scope.launch {
-                                                    val product = viewModel.getProductInfo(item.productId)
-                                                    if (product != null) {
-                                                        viewModel.addProduct(product, 9999.0, item.quantity, isReturn = true)
-                                                        onDismiss()
-                                                    }
+                                                    val fullSale = viewModel.getSaleById(sale.id)
+                                                    selectedSale = fullSale
                                                 }
-                                            }) {
-                                                Text("DEVOLVER")
+                                            }) { Text("VER", style = MaterialTheme.typography.labelSmall) }
+                                        },
+                                        modifier = Modifier.clickable { 
+                                            scope.launch {
+                                                selectedSale = viewModel.getSaleById(sale.id)
                                             }
                                         }
                                     )
+                                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.2f))
                                 }
                             }
                         }
                     }
-                }
 
-                HorizontalDivider()
-
-                // SECCIÓN 2: BUSCAR PRODUCTO MANUAL
-                Column {
-                    Text("2. O BUSCAR PRODUCTO DIRECTAMENTE", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    OutlinedTextField(
-                        value = productSearchQuery,
-                        onValueChange = { productSearchQuery = it },
-                        modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                                scope.launch {
-                                    val product = viewModel.findProductForReturn(productSearchQuery)
-                                    if (product != null) {
-                                        viewModel.addProduct(product, 9999.0, 1.0, isReturn = true)
-                                        onDismiss()
-                                    } else {
-                                        viewModel.setErrorMessage("Producto no encontrado")
+                    // PRODUCTOS DEL TICKET SELECCIONADO
+                    if (selectedSale != null) {
+                        Surface(color = Color(0xFFE3F2FD), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text("Productos del ticket:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                                    items(selectedSale!!.items) { item ->
+                                        ListItem(
+                                            headlineContent = { Text(item.productName, style = if(isSmall) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyLarge) },
+                                            supportingContent = { Text("${item.quantity} x $${item.priceAtSale.formatPrice()}", style = MaterialTheme.typography.labelSmall) },
+                                            trailingContent = {
+                                                Button(
+                                                    onClick = {
+                                                        scope.launch {
+                                                            val product = viewModel.getProductInfo(item.productId)
+                                                            if (product != null) {
+                                                                viewModel.addProduct(product, 9999.0, item.quantity, isReturn = true)
+                                                                onDismiss()
+                                                            }
+                                                        }
+                                                    },
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                    modifier = Modifier.height(32.dp)
+                                                ) {
+                                                    Text("DEV", style = MaterialTheme.typography.labelSmall)
+                                                }
+                                            }
+                                        )
                                     }
                                 }
-                                true
-                            } else false
-                        },
-                        placeholder = { Text("Código o nombre...") },
-                        leadingIcon = { Icon(Icons.Default.Search, null) },
-                        singleLine = true
+                            }
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    // SECCIÓN 2: BUSCAR PRODUCTO MANUAL
+                    Column {
+                        Text("2. O BUSCAR PRODUCTO DIRECTAMENTE", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        OutlinedTextField(
+                            value = productSearchQuery,
+                            onValueChange = { productSearchQuery = it },
+                            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                    scope.launch {
+                                        val product = viewModel.findProductForReturn(productSearchQuery)
+                                        if (product != null) {
+                                            viewModel.addProduct(product, 9999.0, 1.0, isReturn = true)
+                                            onDismiss()
+                                        } else {
+                                            // Si no hay match exacto, ya se están mostrando resultados en la lista de abajo
+                                        }
+                                    }
+                                    true
+                                } else false
+                            },
+                            placeholder = { Text("Código o nombre...") },
+                            leadingIcon = { Icon(Icons.Default.Search, null) },
+                            singleLine = true
+                        )
+                    }
+
+                    // LISTA DE PRODUCTOS ENCONTRADOS (BÚSQUEDA MANUAL)
+                    if (productSearchQuery.length >= 2) {
+                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))) {
+                            LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                                items(foundProducts) { product ->
+                                    ListItem(
+                                        headlineContent = { Text(product.name, fontWeight = FontWeight.Bold, style = if(isSmall) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyLarge) },
+                                        supportingContent = { Text(product.barcode, style = MaterialTheme.typography.labelSmall) },
+                                        trailingContent = {
+                                            Button(
+                                                onClick = {
+                                                    viewModel.addProduct(product, 9999.0, 1.0, isReturn = true)
+                                                    onDismiss()
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                modifier = Modifier.height(32.dp)
+                                            ) {
+                                                Text("DEV", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        },
+                                        modifier = Modifier.clickable { 
+                                            viewModel.addProduct(product, 9999.0, 1.0, isReturn = true)
+                                            onDismiss()
+                                        }
+                                    )
+                                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.2f))
+                                }
+                            }
+                        }
+                    }
+                    
+                    Text(
+                        "Al seleccionar un producto, se agregará al carrito con saldo a favor para el cliente.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                     )
                 }
-                
-                Text(
-                    "Al seleccionar un producto, se agregará al carrito con saldo a favor para el cliente.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                )
             }
         },
         confirmButton = { },

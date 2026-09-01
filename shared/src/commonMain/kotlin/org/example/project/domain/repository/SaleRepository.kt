@@ -60,9 +60,19 @@ class SaleRepository(
 
     fun getSales(branchId: String): Flow<List<Sale>> {
         return saleDao.getSalesByBranch(branchId).map { entities ->
-            // Necesitamos los items para reportes/dashboard
+            entities.map { it.toDomain(emptyList()) }
+        }
+    }
+
+    fun getSalesWithItems(branchId: String): Flow<List<Sale>> {
+        return saleDao.getSalesByBranch(branchId).map { entities ->
+            if (entities.isEmpty()) return@map emptyList()
+            
+            val saleIds = entities.map { it.id }
+            val allItems = saleDao.getItemsBySales(saleIds).groupBy { it.saleId }
+            
             entities.map { entity ->
-                val items = kotlinx.coroutines.runBlocking { getSaleItems(entity.id) }
+                val items = allItems[entity.id]?.map { it.toDomain() } ?: emptyList()
                 entity.toDomain(items)
             }
         }

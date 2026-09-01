@@ -209,30 +209,30 @@ fun MenuButton(
     onClick: () -> Unit
 ) {
     Card(
-        modifier = modifier.heightIn(min = 64.dp).clickable { onClick() },
+        modifier = modifier.heightIn(min = 60.dp).clickable { onClick() },
         border = BorderStroke(1.dp, color.copy(alpha = 0.2f)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(32.dp),
                 shape = CircleShape,
                 color = color.copy(alpha = 0.1f)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
+                    Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
                 }
             }
             
             Spacer(modifier = Modifier.width(12.dp))
             
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title, 
-                    style = MaterialTheme.typography.bodyLarge, 
+                    style = MaterialTheme.typography.titleSmall, 
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )
@@ -245,6 +245,8 @@ fun MenuButton(
                     )
                 }
             }
+            
+            Icon(Icons.Default.ChevronRight, null, tint = Color.LightGray, modifier = Modifier.size(16.dp))
         }
     }
 }

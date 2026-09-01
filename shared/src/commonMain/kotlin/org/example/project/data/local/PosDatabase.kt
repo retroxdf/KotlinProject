@@ -146,6 +146,9 @@ interface SaleDao {
     @Query("SELECT * FROM SaleItemEntity WHERE saleId = :saleId")
     suspend fun getItemsBySale(saleId: String): List<SaleItemEntity>
 
+    @Query("SELECT * FROM SaleItemEntity WHERE saleId IN (:saleIds)")
+    suspend fun getItemsBySales(saleIds: List<String>): List<SaleItemEntity>
+
     @Query("SELECT COUNT(*) FROM SaleEntity")
     suspend fun getSalesCount(): Int
 

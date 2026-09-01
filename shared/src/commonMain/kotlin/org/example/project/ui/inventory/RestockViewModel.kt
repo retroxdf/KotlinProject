@@ -28,7 +28,7 @@ class RestockViewModel(
     val restockSuggestions = combine(
         productRepository.getProducts(),
         productRepository.getAllInventory(),
-        saleRepository.getSales(branchId),
+        saleRepository.getSalesWithItems(branchId),
         movementRepository.getMovementsByBranch(branchId),
         _analysisDays,
         _leadTimeDays

@@ -1898,6 +1898,11 @@ class PosViewModel(
         return saleRepository.searchSales(branchId, query)
     }
 
+    fun searchProductsForReturn(query: String): Flow<List<Product>> {
+        if (query.isBlank()) return flowOf(emptyList())
+        return repository.searchProducts(query, limit = 10)
+    }
+
     suspend fun getSaleById(id: String): Sale? {
         return saleRepository.getSaleById(id)
     }

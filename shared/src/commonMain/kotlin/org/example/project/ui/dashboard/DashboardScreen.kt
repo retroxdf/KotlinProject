@@ -76,7 +76,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val gridCols = if (maxWidth < 600.dp) 1 else 3
             
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 val statsList = listOf(
                     Triple("Ventas Totales", "$${stats.totalSales.formatPrice()}", Icons.Default.TrendingUp to Color(0xFF2E7D32)),
                     Triple("Gastos", "$${stats.totalExpenses.formatPrice()}", Icons.Default.TrendingDown to Color.Red),
@@ -84,7 +84,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
                 )
                 
                 statsList.chunked(gridCols).forEach { rowStats ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         rowStats.forEach { (title, value, meta) ->
                             val (icon, color) = meta
                             StatCard(

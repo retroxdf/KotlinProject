@@ -37,7 +37,7 @@ class DashboardViewModel(
     fun selectTerminal(id: String?) { _selectedTerminalId.value = id }
 
     val dashboardData = combine(
-        saleRepository.getSales(branchId),
+        saleRepository.getSalesWithItems(branchId),
         expenseRepository.getExpenses(branchId),
         productRepository.getProducts(),
         _period,
