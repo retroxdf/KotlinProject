@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "854076807710",
+    "project_id": "posplazita",
+    "storage_bucket": "posplazita.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:854076807710:android:5ba6298cacb3dcfab6ec0f",
+        "android_client_info": {
+          "package_name": "com.abtsplazita.posplazita"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAu02c7DOc_1r1jyuIRqBQX6IegUtNYRag"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

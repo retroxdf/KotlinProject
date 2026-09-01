@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plazita Webshop - Pedidos</title>
+    <!-- Librerías Externas -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        [v-cloak] { display: none; }
+        .product-card:hover { transform: translateY(-5px); transition: all 0.3s ease; }
+        @keyframes slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .animate-slide-in { animation: slide-in 0.3s ease-out; }
+        .animate-pop { animation: pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app" v-cloak>
+        <!-- CABECERA -->
+        <header class="bg-indigo-600 text-white shadow-lg sticky top-0 z-50">
+            <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+                <h1 class="text-2xl font-bold tracking-tight"><i class="fas fa-store mr-2"></i>PLAZITA WEBSHOP</h1>
+                <button @click="showCart = true" class="relative p-2 bg-indigo-500 rounded-full hover:bg-indigo-400 transition">
+                    <i class="fas fa-shopping-cart text-xl"></i>
+                    <span v-if="cartCount > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+                        {{ cartCount }}
+                    </span>
+                </button>
+            </div>
+        </header>
+
+        <main class="container mx-auto px-4 py-8">
+            <!-- 1. SELECTOR DE SUCURSAL -->
+            <div v-if="!selectedBranch" class="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8 text-center border-t-8 border-indigo-600">
+                <i class="fas fa-map-marker-alt text-6xl text-indigo-200 mb-6"></i>
+                <h2 class="text-3xl font-extrabold text-gray-800 mb-2">Bienvenido</h2>
+                <p class="text-gray-500 mb-8">Selecciona tu sucursal para ver existencias en tiempo real.</p>
+                <div class="grid gap-4">
+                    <button v-for="branch in branches" :key="branch.id" @click="selectBranch(branch)"
+                            class="w-full py-4 px-6 bg-gray-50 border-2 border-gray-100 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition text-left flex justify-between items-center group">
+                        <div>
+                            <div class="font-bold text-lg text-gray-800 group-hover:text-indigo-600">{{ branch.name }}</div>
+                            <div class="text-sm text-gray-400">{{ branch.address }}</div>
+                        </div>
+                        <i class="fas fa-chevron-right text-gray-300 group-hover:text-indigo-500 transition"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. CATÁLOGO DE PRODUCTOS -->
+            <div v-else>
+                <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                    <div>
+                        <button @click="selectedBranch = null" class="text-indigo-600 font-bold flex items-center mb-1"><i class="fas fa-arrow-left mr-2"></i> Cambiar Sucursal</button>
+                        <h2 class="text-3xl font-black text-gray-800 uppercase">{{ selectedBranch.name }}</h2>
+                    </div>
+                    <div class="relative w-full md:w-96">
+                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input v-model="search" type="text" placeholder="Buscar producto..." class="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-100 focus:border-indigo-500 focus:outline-none shadow-sm">
+                    </div>
+                </div>
+
+                <div v-if="loading" class="flex justify-center py-20"><div class="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600"></div></div>
+                
+                <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div v-for="product in filteredProducts" :key="product.id" class="bg-white rounded-2xl shadow-sm border border-gray-100 product-card flex flex-col p-4">
+                        <div class="h-40 bg-gray-100 rounded-xl mb-4 overflow-hidden relative">
+                            <img v-if="product.imagePath" :src="product.imagePath" class="w-full h-full object-cover">
+                            <div v-else class="w-full h-full flex items-center justify-center text-gray-300"><i class="fas fa-image text-4xl"></i></div>
+                        </div>
+                        <h3 class="font-bold text-gray-800 mb-1 line-clamp-2 h-12">{{ product.name }}</h3>
+                        <div class="flex justify-between items-end mt-2 mb-4">
+                            <div>
+                                <span class="text-gray-400 text-xs block">Precio</span>
+                                <span class="text-indigo-600 font-black text-xl">${{ product.price3.toFixed(2) }}</span>
+                            </div>
+                            <span class="text-xs font-bold px-2 py-1 bg-green-50 text-green-600 rounded-lg">Stock: {{ product.stock }}</span>
+                        </div>
+                        <button @click="addToCart(product)" :disabled="product.stock <= 0" 
+                                class="w-full py-3 rounded-xl font-bold transition"
+                                :class="product.stock > 0 ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 text-gray-400'">
+                            {{ product.stock > 0 ? 'AGREGAR' : 'AGOTADO' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 3. MODAL DE CARRITO -->
+        <div v-if="showCart" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex justify-end">
+            <div class="w-full max-w-lg bg-white h-screen shadow-2xl flex flex-col animate-slide-in">
+                <div class="p-6 border-b flex justify-between items-center bg-indigo-50">
+                    <h2 class="text-xl font-black text-indigo-900">MI CARRITO</h2>
+                    <button @click="showCart = false"><i class="fas fa-times text-2xl text-gray-400"></i></button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-6">
+                    <div v-for="(item, index) in cart" :key="index" class="flex items-center gap-4 bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100">
+                        <div class="flex-1">
+                            <div class="font-bold text-gray-800">{{ item.productName }}</div>
+                            <div class="text-indigo-600 font-bold">$ {{ item.subtotal.toFixed(2) }}</div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button @click="updateQty(index, -1)" class="w-8 h-8 border rounded-full bg-white">-</button>
+                            <span class="font-black">{{ item.quantity }}</span>
+                            <button @click="updateQty(index, 1)" class="w-8 h-8 border rounded-full bg-white">+</button>
+                        </div>
+                    </div>
+                </div>
+                <div v-if="cart.length > 0" class="p-6 border-t bg-gray-50">
+                    <div class="flex justify-between mb-6">
+                        <span class="font-bold text-gray-500 uppercase tracking-widest">Total:</span>
+                        <span class="text-3xl font-black text-indigo-600">$ {{ cartTotal.toFixed(2) }}</span>
+                    </div>
+                    
+                    <div v-if="!checkout">
+                        <button @click="checkout = true" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-lg">CONTINUAR</button>
+                    </div>
+                    <div v-else class="space-y-4">
+                        <input v-model="orderData.name" placeholder="Tu Nombre / Identificador" class="w-full p-4 border-2 rounded-xl focus:border-indigo-500 focus:outline-none">
+                        <input v-model="orderData.address" placeholder="Mesa / Dirección / Notas" class="w-full p-4 border-2 rounded-xl focus:border-indigo-500 focus:outline-none">
+                        <div class="flex gap-2">
+                            <button @click="checkout = false" class="px-6 bg-gray-200 rounded-xl font-bold">VOLVER</button>
+                            <button @click="sendOrder" :disabled="sending || !orderData.name" 
+                                    class="flex-1 py-4 bg-green-600 text-white rounded-2xl font-black text-lg disabled:bg-gray-300">
+                                {{ sending ? 'ENVIANDO...' : 'ENVIAR PEDIDO' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. MENSAJE DE ÉXITO -->
+        <div v-if="successOrder" class="fixed inset-0 bg-black/80 backdrop-blur z-[200] flex items-center justify-center p-4">
+            <div class="bg-white rounded-3xl p-10 text-center max-w-sm w-full animate-pop shadow-2xl">
+                <div class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-check text-4xl"></i>
+                </div>
+                <h3 class="text-2xl font-black mb-2">¡PEDIDO ENVIADO!</h3>
+                <p class="text-gray-500 mb-8">Tu pedido #{{ successOrder.slice(-5) }} ha sido registrado correctamente.</p>
+                <button @click="resetAll" class="w-full py-4 bg-gray-800 text-white rounded-2xl font-bold hover:bg-black transition">ENTENDIDO</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LÓGICA DE FIREBASE Y VUE -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, setDoc, doc, query, where, onSnapshot, increment, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+        // CONFIGURACIÓN DE FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyAu02c7DOc_1r1jyuIRqBQX6IegUtNYRag",
+            authDomain: "posplazita.firebaseapp.com",
+            projectId: "posplazita",
+            storageBucket: "posplazita.appspot.com",
+            messagingSenderId: "571829913797874",
+            appId: "1:571829913797874:web:8655079899386769f339f4"
+        };
+
+        const firebaseApp = initializeApp(firebaseConfig);
+        const db = getFirestore(firebaseApp);
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const branches = ref([]), products = ref([]), inventory = ref({}), selectedBranch = ref(null);
+                const loading = ref(true), search = ref(''), showCart = ref(false), cart = ref([]), checkout = ref(false);
+                const sending = ref(false), successOrder = ref(null), orderData = ref({ name: '', address: '' });
+
+                const selectBranch = (branch) => { selectedBranch.value = branch; loadBranchInventory(branch.id); };
+                
+                const loadInitialData = async () => {
+                    try {
+                        const bSnap = await getDocs(collection(db, "branches"));
+                        branches.value = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        const pSnap = await getDocs(collection(db, "products"));
+                        products.value = pSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        loading.value = false;
+                    } catch (e) { console.error("Error inicial:", e); }
+                };
+
+                const loadBranchInventory = (branchId) => {
+                    loading.value = true;
+                    onSnapshot(query(collection(db, "inventory"), where("branchId", "==", branchId)), (snap) => {
+                        const inv = {}; snap.docs.forEach(d => inv[d.data().productId] = d.data().stock);
+                        inventory.value = inv;
+                        loading.value = false;
+                    });
+                };
+
+                const filteredProducts = computed(() => {
+                    return products.value
+                        .map(p => ({ ...p, stock: inventory.value[p.id] || 0 }))
+                        .filter(p => p.stock > 0 && p.name.toLowerCase().includes(search.value.toLowerCase()));
+                });
+
+                const addToCart = (p) => {
+                    const ex = cart.value.find(i => i.productId === p.id);
+                    if (ex) { if (ex.quantity < p.stock) ex.quantity++; }
+                    else {
+                        cart.value.push({ 
+                            productId: p.id, productName: p.name, 
+                            priceAtOrder: p.price3 || 0, quantity: 1, 
+                            subtotal: p.price3 || 0, imagePath: p.imagePath || null 
+                        });
+                    }
+                    updateTotals();
+                };
+
+                const updateQty = (idx, d) => {
+                    const i = cart.value[idx]; const stock = inventory.value[i.productId] || 0;
+                    if (i.quantity + d > 0 && i.quantity + d <= stock) { i.quantity += d; updateTotals(); }
+                    else if (i.quantity + d === 0) cart.value.splice(idx, 1);
+                };
+
+                const updateTotals = () => cart.value.forEach(i => i.subtotal = i.quantity * i.priceAtOrder);
+                const cartCount = computed(() => cart.value.reduce((a, i) => a + i.quantity, 0));
+                const cartTotal = computed(() => cart.value.reduce((a, i) => a + i.subtotal, 0));
+
+                const sendOrder = async () => {
+                    if (!orderData.value.name || cart.value.length === 0) return;
+                    sending.value = true;
+                    try {
+                        const orderId = "WEB_" + Date.now();
+                        const order = {
+                            id: orderId, timestamp: Date.now(), branchId: selectedBranch.value.id,
+                            customerName: orderData.value.name, address: orderData.value.address || "",
+                            items: cart.value.map(i => ({ 
+                                productId: i.productId, productName: i.productName, 
+                                quantity: Number(i.quantity), priceAtOrder: Number(i.priceAtOrder), 
+                                subtotal: Number(i.subtotal), isWebDiscounted: true 
+                            })),
+                            total: Number(cartTotal.value), status: "PENDING"
+                        };
+
+                        // 1. Guardar el pedido
+                        await setDoc(doc(db, "web_orders", orderId), order);
+
+                        // 2. DESCONTAR STOCK ATÓMICAMENTE (BATCH)
+                        const batch = writeBatch(db);
+                        order.items.forEach(i => {
+                            const invRef = doc(db, "inventory", `${order.branchId}_${i.productId}`);
+                            batch.update(invRef, { stock: increment(-i.quantity), lastUpdated: Date.now() });
+
+                            // 3. REGISTRAR MOVIMIENTO PARA EL POS
+                            const movId = "MOV_" + Date.now() + "_" + i.productId;
+                            const movRef = doc(db, "movements", movId);
+                            batch.set(movRef, {
+                                id: Date.now(),
+                                productId: i.productId,
+                                branchId: order.branchId,
+                                type: "OUT_SALE",
+                                quantity: Number(i.quantity),
+                                timestamp: Date.now(),
+                                userId: "web_customer",
+                                reason: "Venta Web #" + orderId.slice(-5)
+                            });
+                        });
+                        await batch.commit();
+
+                        successOrder.value = orderId;
+                    } catch (e) { 
+                        console.error("Error Firebase:", e); 
+                        alert("Error al enviar pedido: " + e.message); 
+                    } finally { sending.value = false; }
+                };
+
+                const resetAll = () => { 
+                    cart.value = []; showCart.value = false; checkout.value = false; 
+                    successOrder.value = null; orderData.value = { name: '', address: '' }; 
+                };
+
+                onMounted(loadInitialData);
+                return { branches, selectedBranch, loading, search, selectBranch, filteredProducts, addToCart, cartCount, showCart, cart, updateQty, cartTotal, checkout, orderData, sendOrder, sending, successOrder, resetAll };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
