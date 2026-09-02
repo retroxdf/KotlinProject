@@ -19,6 +19,9 @@ import com.abtsplazita.posplazita.domain.Inventory
 import com.abtsplazita.posplazita.domain.WebOrder
 import com.abtsplazita.posplazita.domain.DeletionRequest
 import com.abtsplazita.posplazita.domain.DeletionLog
+import com.abtsplazita.posplazita.domain.AttendanceRecord
+import com.abtsplazita.posplazita.domain.Schedule
+import com.abtsplazita.posplazita.domain.Employee
 
 class AndroidCloudProvider : CloudProvider {
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -502,6 +505,38 @@ class AndroidCloudProvider : CloudProvider {
         }
     }
 
+    override fun syncAttendance(record: AttendanceRecord) {
+        scope.launch {
+            try {
+                firestore.collection("attendance").document(record.id.toString()).set(AttendanceRecord.serializer(), record)
+            } catch (e: Exception) {}
+        }
+    }
+
+    override fun syncSchedule(schedule: Schedule) {
+        scope.launch {
+            try {
+                firestore.collection("schedules").document(schedule.id.toString()).set(Schedule.serializer(), schedule)
+            } catch (e: Exception) {}
+        }
+    }
+
+    override fun syncEmployee(employee: Employee) {
+        scope.launch {
+            try {
+                firestore.collection("employees").document(employee.id.toString()).set(Employee.serializer(), employee)
+            } catch (e: Exception) {}
+        }
+    }
+
+    override fun deleteEmployee(id: Long) {
+        scope.launch {
+            try {
+                firestore.collection("employees").document(id.toString()).delete()
+            } catch (e: Exception) {}
+        }
+    }
+
     override fun observeDeletionLogs(branchId: String, onUpdate: (List<DeletionLog>) -> Unit) {
         // Deshabilitado tiempo real para ahorrar recursos.
     }
@@ -622,6 +657,30 @@ class AndroidCloudProvider : CloudProvider {
                 .get().documents.mapNotNull { 
                     try { it.data(Inventory.serializer()) } catch (e: Exception) { null }
                 }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    override suspend fun fetchAttendance(userId: String): List<AttendanceRecord> {
+        return try {
+            firestore.collection("attendance").where { "userId" equalTo userId }.get().documents.mapNotNull {
+                try { it.data(AttendanceRecord.serializer()) } catch (e: Exception) { null }
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    override suspend fun fetchSchedules(employeeId: Long): List<Schedule> {
+        return try {
+            firestore.collection("schedules").where { "employeeId" equalTo employeeId }.get().documents.mapNotNull {
+                try { it.data(Schedule.serializer()) } catch (e: Exception) { null }
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    override suspend fun fetchEmployees(): List<Employee> {
+        return try {
+            firestore.collection("employees").get().documents.mapNotNull {
+                try { it.data(Employee.serializer()) } catch (e: Exception) { null }
+            }
         } catch (e: Exception) { emptyList() }
     }
 }

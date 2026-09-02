@@ -613,7 +613,8 @@ fun Schedule.toEntity() = ScheduleEntity(
     checkInTime = checkInTime,
     checkOutTime = checkOutTime,
     isRestDay = isRestDay,
-    branchName = branchName
+    branchName = branchName,
+    isSynced = false
 )
 
 fun LoanEntity.toDomain() = Loan(id, employeeId, amount, date, isPaid)
@@ -669,7 +670,7 @@ fun PaymentRecordEntity.toDomain() = PaymentRecord(id, employeeId, employeeName,
 fun PaymentRecord.toEntity() = PaymentRecordEntity(id, employeeId, employeeName, date, amount, reportText)
 
 fun AttendanceEntity.toDomain() = AttendanceRecord(id, userId, employeeId, startTime, endTime, hoursWorked, payAmount, isClosed)
-fun AttendanceRecord.toEntity() = AttendanceEntity(id, userId, employeeId, startTime, endTime, hoursWorked, payAmount, isClosed)
+fun AttendanceRecord.toEntity() = AttendanceEntity(id, userId, employeeId, startTime, endTime, hoursWorked, payAmount, isClosed, isSynced = false)
 
 fun RolePermissionEntity.toDomain() = RolePermission(Role.valueOf(role), Permission.valueOf(permission), PermissionLevel.valueOf(level))
 fun RolePermission.toEntity() = RolePermissionEntity(role.name, permission.name, level.name)

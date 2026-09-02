@@ -102,6 +102,12 @@ fun PosMainScreen(
         focusRequester.requestFocus()
     }
 
+    LaunchedEffect(currentFocusArea) {
+        if (currentFocusArea == PosViewModel.FocusArea.SEARCH_BAR) {
+            focusRequester.requestFocus()
+        }
+    }
+
     Scaffold(
         topBar = {
             BoxWithConstraints {
@@ -278,9 +284,9 @@ fun PosMainScreen(
                             if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin productos", color = Color.Gray) }
                             else LazyColumn(modifier = Modifier.fillMaxSize()) {
                                 itemsIndexed(items) { index, item ->
-                                    val isSelected = index == selectedCartIndex
+                                    val isSelected = index == selectedCartIndex && currentFocusArea == PosViewModel.FocusArea.CART
                                     Row(
-                                        modifier = Modifier.fillMaxWidth().background(if (isSelected) Color(0xFF2196F3) else Color.Transparent).clickable { viewModel.setSelectedCartIndex(index) }.padding(vertical = 8.dp, horizontal = 4.dp), 
+                                        modifier = Modifier.fillMaxWidth().background(if (isSelected) Color(0xFF2196F3) else Color.Transparent).clickable { viewModel.setSelectedCartIndex(index); viewModel.setFocusArea(PosViewModel.FocusArea.CART) }.padding(vertical = 8.dp, horizontal = 4.dp), 
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Card(
@@ -323,9 +329,9 @@ fun PosMainScreen(
                             if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Esperando productos...", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.outline) }
                             else LazyColumn(modifier = Modifier.fillMaxSize()) {
                                 itemsIndexed(items) { index, item ->
-                                    val isSelected = index == selectedCartIndex
+                                    val isSelected = index == selectedCartIndex && currentFocusArea == PosViewModel.FocusArea.CART
                                     Row(
-                                        modifier = Modifier.fillMaxWidth().background(if (isSelected) Color(0xFF2196F3) else Color.Transparent).clickable { viewModel.setSelectedCartIndex(index) }.padding(vertical = 4.dp, horizontal = 4.dp), 
+                                        modifier = Modifier.fillMaxWidth().background(if (isSelected) Color(0xFF2196F3) else Color.Transparent).clickable { viewModel.setSelectedCartIndex(index); viewModel.setFocusArea(PosViewModel.FocusArea.CART) }.padding(vertical = 4.dp, horizontal = 4.dp), 
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Surface(modifier = Modifier.width(45.dp), color = Color.Transparent, onClick = { viewModel.setSelectedCartIndex(index); viewModel.openQuantityDialog(item) }) {

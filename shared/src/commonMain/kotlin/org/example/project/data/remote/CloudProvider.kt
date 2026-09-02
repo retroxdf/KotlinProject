@@ -13,6 +13,9 @@ import com.abtsplazita.posplazita.domain.Inventory
 import com.abtsplazita.posplazita.domain.WebOrder
 import com.abtsplazita.posplazita.domain.DeletionRequest
 import com.abtsplazita.posplazita.domain.DeletionLog
+import com.abtsplazita.posplazita.domain.AttendanceRecord
+import com.abtsplazita.posplazita.domain.Schedule
+import com.abtsplazita.posplazita.domain.Employee
 
 interface CloudProvider {
     fun syncProduct(product: Product)
@@ -70,6 +73,11 @@ interface CloudProvider {
     fun syncDeletionLog(log: DeletionLog)
     fun observeDeletionLogs(branchId: String, onUpdate: (List<DeletionLog>) -> Unit)
 
+    fun syncAttendance(record: AttendanceRecord)
+    fun syncSchedule(schedule: Schedule)
+    fun syncEmployee(employee: Employee)
+    fun deleteEmployee(id: Long)
+
     fun syncInventory(inventory: Inventory)
     fun syncInventoryBatch(branchId: String, items: List<Inventory>)
     fun observeInventoryIncremental(branchId: String, since: Long, onUpdate: (List<Inventory>) -> Unit)
@@ -94,6 +102,9 @@ interface CloudProvider {
     suspend fun fetchTerminals(branchId: String): List<PosTerminal>
     suspend fun fetchInventory(branchId: String): List<Inventory>
     suspend fun fetchInventoryIncremental(branchId: String, since: Long): List<Inventory>
+    suspend fun fetchAttendance(userId: String): List<AttendanceRecord>
+    suspend fun fetchSchedules(employeeId: Long): List<Schedule>
+    suspend fun fetchEmployees(): List<Employee>
 }
 
 expect fun getCloudProvider(): CloudProvider

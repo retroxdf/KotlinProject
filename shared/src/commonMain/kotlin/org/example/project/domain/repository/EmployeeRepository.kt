@@ -3,6 +3,7 @@ package com.abtsplazita.posplazita.domain.repository
 import com.abtsplazita.posplazita.data.local.*
 import com.abtsplazita.posplazita.data.*
 import com.abtsplazita.posplazita.domain.*
+import com.abtsplazita.posplazita.data.remote.FirebaseManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -15,18 +16,29 @@ class EmployeeRepository(
     private val transactionDao: ContaplaTransactionDao,
     private val corteDao: CorteContaplaDao,
     private val paymentRecordDao: PaymentRecordDao,
-    private val attendanceDao: AttendanceDao
+    private val attendanceDao: AttendanceDao,
+    private val firebaseManager: FirebaseManager? = null
 ) {
     // Employees
     val allEmployees: Flow<List<Employee>> = employeeDao.getAllEmployees().map { list -> list.map { it.toDomain() } }
 
     suspend fun getEmployeeById(id: Long): Employee? = employeeDao.getEmployeeById(id)?.toDomain()
 
-    suspend fun insertEmployee(employee: Employee): Long = employeeDao.insertEmployee(employee.toEntity())
+    suspend fun insertEmployee(employee: Employee): Long {
+        val id = employeeDao.insertEmployee(employee.toEntity())
+        firebaseManager?.syncEmployee(employee.copy(id = id))
+        return id
+    }
 
-    suspend fun updateEmployee(employee: Employee) = employeeDao.updateEmployee(employee.toEntity())
+    suspend fun updateEmployee(employee: Employee) {
+        employeeDao.updateEmployee(employee.toEntity())
+        firebaseManager?.syncEmployee(employee)
+    }
 
-    suspend fun deleteEmployee(employee: Employee) = employeeDao.deleteEmployee(employee.toEntity())
+    suspend fun deleteEmployee(employee: Employee) {
+        employeeDao.deleteEmployee(employee.toEntity())
+        firebaseManager?.deleteEmployee(employee.id)
+    }
 
     // Schedules
     val allSchedules: Flow<List<Schedule>> = scheduleDao.getAllSchedules().map { list -> list.map { it.toDomain() } }
@@ -34,9 +46,15 @@ class EmployeeRepository(
     fun getSchedulesForEmployee(employeeId: Long): Flow<List<Schedule>> =
         scheduleDao.getSchedulesForEmployee(employeeId).map { list -> list.map { it.toDomain() } }
 
-    suspend fun insertSchedule(schedule: Schedule) = scheduleDao.insertSchedule(schedule.toEntity())
+    suspend fun insertSchedule(schedule: Schedule) {
+        scheduleDao.insertSchedule(schedule.toEntity())
+        firebaseManager?.syncSchedule(schedule)
+    }
 
-    suspend fun updateSchedule(schedule: Schedule) = scheduleDao.updateSchedule(schedule.toEntity())
+    suspend fun updateSchedule(schedule: Schedule) {
+        scheduleDao.updateSchedule(schedule.toEntity())
+        firebaseManager?.syncSchedule(schedule)
+    }
 
     suspend fun deleteSchedule(schedule: Schedule) = scheduleDao.deleteSchedule(schedule.toEntity())
     
@@ -110,14 +128,31 @@ class EmployeeRepository(
 
     suspend fun insertAttendance(record: AttendanceRecord) {
         attendanceDao.insertAttendance(record.toEntity())
+        firebaseManager?.syncAttendance(record)
     }
 
     suspend fun updateAttendance(record: AttendanceRecord) {
         attendanceDao.updateAttendance(record.toEntity())
+        firebaseManager?.syncAttendance(record)
     }
 
     fun getAttendanceInRange(userId: String, start: Long, end: Long): Flow<List<AttendanceRecord>> {
         return attendanceDao.getAttendanceInRange(userId, start, end).map { list -> list.map { it.toDomain() } }
+    }
+
+    suspend fun refreshAttendance(userId: String) {
+        val cloudItems = firebaseManager?.fetchAttendance(userId) ?: return
+        cloudItems.forEach { attendanceDao.insertAttendance(it.toEntity().copy(isSynced = true)) }
+    }
+
+    suspend fun refreshSchedules(employeeId: Long) {
+        val cloudItems = firebaseManager?.fetchSchedules(employeeId) ?: return
+        cloudItems.forEach { scheduleDao.insertSchedule(it.toEntity().copy(isSynced = true)) }
+    }
+
+    suspend fun refreshEmployees() {
+        val cloudItems = firebaseManager?.fetchEmployees() ?: return
+        cloudItems.forEach { employeeDao.insertEmployee(it.toEntity()) }
     }
 
     suspend fun insertPaymentRecord(record: PaymentRecord) = paymentRecordDao.insertPaymentRecord(record.toEntity())

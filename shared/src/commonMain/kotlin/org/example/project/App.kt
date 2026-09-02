@@ -47,6 +47,7 @@ import com.abtsplazita.posplazita.data.remote.FirebaseManager
 import com.abtsplazita.posplazita.data.remote.MercadoPagoManager
 import com.abtsplazita.posplazita.data.SyncManager
 import com.abtsplazita.posplazita.domain.formatPrice
+import com.abtsplazita.posplazita.formatTimestamp
 import androidx.compose.ui.tooling.preview.Preview
 import io.kamel.core.config.KamelConfig
 import io.kamel.core.config.Core
@@ -81,17 +82,7 @@ fun AppContent() {
     val firebaseManager = remember { FirebaseManager() }
     val globalScope = rememberCoroutineScope()
 
-    val productRepository = remember { 
-        ProductRepository(
-            database.productDao(), 
-            database.inventoryDao(), 
-            database.stockMovementDao(), 
-            database.categoryDao(), 
-            database.taxDao(), 
-            firebaseManager, 
-            globalScope
-        ) 
-    }
+    val productRepository = remember { ProductRepository(database.productDao(), database.inventoryDao(), database.stockMovementDao(), database.categoryDao(), database.taxDao(), firebaseManager, globalScope) }
     val saleRepository = remember { SaleRepository(database.saleDao(), database.heldSaleDao(), firebaseManager) }
     val userRepository = remember { UserRepository(database.userDao(), database.rolePermissionDao(), firebaseManager, globalScope) }
     val purchaseRepository = remember { PurchaseRepository(database.purchaseDao(), productRepository) }
@@ -107,7 +98,7 @@ fun AppContent() {
     val permissionRepository = remember { PermissionRepository(database.rolePermissionDao()) }
     val supplierRepository = remember { SupplierRepository(database.supplierDao(), database.supplierPaymentDao(), database.productSupplierDao()) }
     val customerRepository = remember { CustomerRepository(database.customerDao(), database.customerPaymentDao(), database.customerProductPriceDao(), firebaseManager, globalScope) }
-    val employeeRepository = remember { EmployeeRepository(database.employeeDao(), database.scheduleDao(), database.loanDao(), database.absenceReplacementDao(), database.cashBoxDao(), database.contaplaTransactionDao(), database.corteContaplaDao(), database.paymentRecordDao(), database.attendanceDao()) }
+    val employeeRepository = remember { EmployeeRepository(database.employeeDao(), database.scheduleDao(), database.loanDao(), database.absenceReplacementDao(), database.cashBoxDao(), database.contaplaTransactionDao(), database.corteContaplaDao(), database.paymentRecordDao(), database.attendanceDao(), firebaseManager) }
     val settingsRepository = remember { SettingsRepository(database.appSettingsDao()) }
     val deletionLogRepository = remember { DeletionLogRepository(database.deletionLogDao(), firebaseManager) }
     val productReturnRepository = remember { ProductReturnRepository(database.productReturnDao(), firebaseManager) }
@@ -116,7 +107,7 @@ fun AppContent() {
     val printerManager = remember { getRealPrinterManager() }
     val currentSaleManager = remember { CurrentSaleManager(settingsRepository, globalScope) }
     
-    val syncManager = remember { SyncManager(saleRepository, cashMovementRepository, productRepository, branchRepository, userRepository, customerRepository, settingsRepository, globalScope) }
+    val syncManager = remember { SyncManager(saleRepository, cashMovementRepository, productRepository, branchRepository, userRepository, employeeRepository, customerRepository, settingsRepository, globalScope) }
     
     LaunchedEffect(Unit) {
         syncManager.startAutoSync()
@@ -165,22 +156,10 @@ fun AppContent() {
     val purchaseViewModel = remember(branchId) { PurchaseViewModel(productRepository, purchaseRepository, supplierRepository, cashMovementRepository, purchaseUnitRepository, branchId) }
     val historyViewModel = remember(branchId) { 
         HistoryViewModel(
-            saleRepository, 
-            purchaseRepository, 
-            productRepository, 
-            customerRepository, 
-            posTerminalRepository, 
-            cashOutRepository, 
-            cashMovementRepository, 
-            preCutRepository, 
-            deletionLogRepository, 
-            productReturnRepository, 
-            supplierRepository, 
-            branchRepository, 
-            employeeRepository, 
-            settingsRepository, 
-            printerManager, 
-            branchId
+            saleRepository, purchaseRepository, productRepository, customerRepository, 
+            posTerminalRepository, cashOutRepository, cashMovementRepository, preCutRepository, 
+            deletionLogRepository, productReturnRepository, supplierRepository, 
+            branchRepository, employeeRepository, settingsRepository, printerManager, branchId
         ) 
     }
     val inventoryViewModel = remember(branchId) { InventoryViewModel(productRepository, branchRepository, branchId) }
@@ -189,16 +168,7 @@ fun AppContent() {
     val userViewModel = remember(branchId) { UserViewModel(userRepository, employeeRepository, permissionRepository, branchId) }
     val promotionViewModel = remember { PromotionViewModel(promotionRepository, productRepository) }
     val customerViewModel = remember(branchId) { CustomerViewModel(customerRepository, productRepository, saleRepository, cashMovementRepository, printerManager, branchId) }
-    val contabilidadViewModel = remember(branchId) { 
-        ContabilidadViewModel(
-            employeeRepository, 
-            userRepository, 
-            branchRepository, 
-            expenseRepository, 
-            settingsRepository, 
-            branchId
-        ) 
-    }
+    val contabilidadViewModel = remember(branchId) { ContabilidadViewModel(employeeRepository, userRepository, branchRepository, expenseRepository, settingsRepository, branchId) }
     val expenseViewModel = remember(branchId) { ExpenseViewModel(expenseRepository, branchId) }
     val dashboardViewModel = remember(branchId) { DashboardViewModel(saleRepository, expenseRepository, productRepository, posTerminalRepository, branchId) }
     val branchPeripheralViewModel = remember(branchId) { PeripheralViewModel(settingsRepository, printerManager, posTerminalRepository, firebaseManager, mercadoPagoManager, productRepository, branchId) }
@@ -463,45 +433,227 @@ data class NavigationItem(val id: String, val label: String, val icon: androidx.
 fun UserPanelFullScreen(viewModel: AuthViewModel, onDismiss: () -> Unit) {
     val stats by viewModel.userStats.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize()) {
-                Surface(color = MaterialTheme.colorScheme.primary, contentColor = Color.White) {
+                // Header
+                Surface(color = Color(0xFF0056A0), contentColor = Color.White) {
                     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null) }
-                        Spacer(Modifier.width(16.dp))
-                        Text("MI CUENTA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                        IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White) }
+                        Spacer(Modifier.width(8.dp))
+                        Text("MI CUENTA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     }
                 }
-                if (stats == null) { Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() } }
-                else {
-                    Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(modifier = Modifier.size(80.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(60.dp)) } }
-                            Spacer(Modifier.width(20.dp))
-                            Column {
-                                Text(currentUser?.username?.uppercase() ?: "", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                                Text(currentUser?.role?.name ?: "", color = Color.Gray)
+
+                if (stats == null) {
+                    Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                } else {
+                    val days = listOf("Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom")
+                    
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val isSmall = maxWidth < 700.dp
+                        
+                        @Composable
+                        fun ColumnScope.LeftPart() {
+                            Surface(
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                                color = Color(0xFFF5F7FA)
+                            ) {
+                                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(modifier = Modifier.size(60.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+                                            }
+                                        }
+                                        Spacer(Modifier.width(16.dp))
+                                        Column {
+                                            Text(currentUser?.username?.uppercase() ?: "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                                            Text(currentUser?.role?.name ?: "", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
+
+                                    HorizontalDivider()
+
+                                    Text("REGISTRO DE HOY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                    
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        InfoRow(label = "ENTRADA REAL", value = stats!!.checkInTime?.let { formatTimestamp(it).split(" ").last().take(5) } ?: "--:--", icon = Icons.AutoMirrored.Filled.Login, color = Color(0xFF1976D2))
+                                        InfoRow(label = "SALIDA REAL", value = stats!!.checkOutTime?.let { formatTimestamp(it).split(" ").last().take(5) } ?: "--:--", icon = Icons.AutoMirrored.Filled.Logout, color = Color(0xFFD32F2F))
+                                    }
+                                    
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("JORNADA ASIGNADA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("Descanso:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                        Text(stats!!.restDay, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
-                        HorizontalDivider()
-                        com.abtsplazita.posplazita.ui.StatPanelRow("Días Trabajados (Esta Semana)", "${stats!!.daysWorked} días", Icons.Default.EventAvailable, Color(0xFF2E7D32))
-                        com.abtsplazita.posplazita.ui.StatPanelRow("Día de Descanso", stats!!.restDay, Icons.Default.SelfImprovement, Color(0xFFE91E63))
-                        Spacer(Modifier.height(16.dp))
-                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)), border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)) {
-                            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("PAGO ESTIMADO SEMANAL", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                                Text("$${stats!!.earnings.formatPrice()}", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-                                Spacer(Modifier.height(12.dp))
-                                Text("Bono acumulado: $${stats!!.bonus.formatPrice()}", style = MaterialTheme.typography.titleMedium, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+
+                        @Composable
+                        fun RowScope.LeftPartRow() {
+                            Surface(
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                                color = Color(0xFFF5F7FA)
+                            ) {
+                                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(modifier = Modifier.size(60.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+                                            }
+                                        }
+                                        Spacer(Modifier.width(16.dp))
+                                        Column {
+                                            Text(currentUser?.username?.uppercase() ?: "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                                            Text(currentUser?.role?.name ?: "", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
+
+                                    HorizontalDivider()
+
+                                    Text("REGISTRO DE HOY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                    
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        InfoRow(label = "ENTRADA REAL", value = stats!!.checkInTime?.let { formatTimestamp(it).split(" ").last().take(5) } ?: "--:--", icon = Icons.AutoMirrored.Filled.Login, color = Color(0xFF1976D2))
+                                        InfoRow(label = "SALIDA REAL", value = stats!!.checkOutTime?.let { formatTimestamp(it).split(" ").last().take(5) } ?: "--:--", icon = Icons.AutoMirrored.Filled.Logout, color = Color(0xFFD32F2F))
+                                    }
+                                    
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("JORNADA ASIGNADA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("Descanso:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                        Text(stats!!.restDay, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    }
+                                    
+                                    Spacer(Modifier.weight(1f))
+                                    Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+                                        Text("CERRAR")
+                                    }
+                                }
                             }
                         }
-                        Spacer(Modifier.weight(1f))
-                        Text("Nota: Los montos son un estimado basado en tu salario base y bono de asistencia proporcional. El pago final se realiza en administración.", style = MaterialTheme.typography.bodySmall, color = Color.Gray, textAlign = TextAlign.Center, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
-                        Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("CERRAR") }
+
+                        @Composable
+                        fun ColumnScope.RightPart() {
+                            Surface(modifier = Modifier.weight(1.5f).fillMaxWidth(), color = Color.White) {
+                                RightContent(stats, onDismiss, true)
+                            }
+                        }
+
+                        @Composable
+                        fun RowScope.RightPartRow() {
+                            Surface(modifier = Modifier.weight(1.5f).fillMaxHeight(), color = Color.White) {
+                                RightContent(stats, onDismiss, false)
+                            }
+                        }
+
+                        if (isSmall) {
+                            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                                LeftPart()
+                                RightPart()
+                            }
+                        } else {
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                LeftPartRow()
+                                VerticalDivider(thickness = 1.dp, color = Color.LightGray.copy(alpha = 0.5f))
+                                RightPartRow()
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun RightContent(stats: UserPanelStats?, onDismiss: () -> Unit, isSmall: Boolean) {
+    if (stats == null) return
+    Column(modifier = Modifier.padding(16.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.ChevronLeft, null, tint = Color.Gray)
+            Text("ESTA SEMANA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFF0056A0), modifier = Modifier.padding(horizontal = 16.dp))
+            Icon(Icons.Default.ChevronRight, null, tint = Color.Gray)
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text("📅 DÍAS DE LA SEMANA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F4F9)), shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                stats.weekDetails.forEach { day ->
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(day.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val (icon, color) = when(day.status) {
+                                    "TRABAJADO" -> Icons.Default.Work to Color(0xFF795548)
+                                    "DESCANSO" -> Icons.Default.Bedtime to Color(0xFFFF9800)
+                                    "FALTA" -> Icons.Default.Cancel to Color.Red
+                                    else -> Icons.Default.HourglassEmpty to Color.Gray
+                                }
+                                Icon(icon, null, tint = color, modifier = Modifier.size(12.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(day.status, style = MaterialTheme.typography.labelSmall, color = color)
+                            }
+                        }
+                        Text("$${day.amount.formatPrice()}", fontWeight = FontWeight.Black, style = MaterialTheme.typography.bodyLarge)
+                    }
+                    if (day.name != "Domingo") HorizontalDivider(color = Color.White.copy(alpha = 0.5f))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Text("📈 RESUMEN DE INGRESOS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                IncomeRow("Sueldo Base Acumulado", "$${(stats.earnings - stats.bonus).formatPrice()}")
+                IncomeRow("Bono Semanal", "$${stats.bonus.formatPrice()}")
+                HorizontalDivider()
+                IncomeRow("TOTAL ESTIMADO", "$${stats.earnings.formatPrice()}", isBold = true, color = Color(0xFF0056A0))
+            }
+        }
+        if (stats.daysWorked > 0 && stats.bonus == 0.0) {
+            Surface(color = Color(0xFFFFEBEE), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, null, tint = Color.Red, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("BONO PERDIDO POR FALTA", style = MaterialTheme.typography.labelSmall, color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        if (isSmall) {
+            Spacer(Modifier.height(24.dp))
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(8.dp)) {
+                Text("CERRAR MI CUENTA")
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoRow(label: String, value: String, icon: ImageVector, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun IncomeRow(label: String, value: String, isBold: Boolean = false, color: Color = Color.Unspecified) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = if(isBold) Color.Black else Color.Gray)
+        Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = if(isBold) FontWeight.Black else FontWeight.Bold, color = color)
     }
 }

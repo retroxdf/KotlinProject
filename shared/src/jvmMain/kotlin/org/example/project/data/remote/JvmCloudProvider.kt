@@ -343,6 +343,21 @@ class JvmCloudProvider : CloudProvider {
         scope.launch { while(true) { onUpdate(queryDocuments("deletion_logs", branchId).map { Json.decodeFromJsonElement(it) }); delay(PULSE_FAST) } }
     }
 
+    override fun syncAttendance(record: AttendanceRecord) {
+        scope.launch { patchDocument("attendance", record.id.toString(), Json.encodeToJsonElement(record).jsonObject) }
+    }
+    override fun syncSchedule(schedule: Schedule) {
+        scope.launch { patchDocument("schedules", schedule.id.toString(), Json.encodeToJsonElement(schedule).jsonObject) }
+    }
+
+    override fun syncEmployee(employee: Employee) {
+        scope.launch { patchDocument("employees", employee.id.toString(), Json.encodeToJsonElement(employee).jsonObject) }
+    }
+
+    override fun deleteEmployee(id: Long) {
+        scope.launch { deleteDocument("employees", id.toString()) }
+    }
+
     override fun syncInventory(inventory: Inventory) {
         scope.launch { patchDocument("inventory", "${inventory.branchId}_${inventory.productId}", Json.encodeToJsonElement(inventory).jsonObject) }
     }
@@ -387,6 +402,24 @@ class JvmCloudProvider : CloudProvider {
     
     override suspend fun fetchInventory(branchId: String): List<Inventory> = queryDocuments("inventory", branchId).map { Json.decodeFromJsonElement(it) }
     override suspend fun fetchInventoryIncremental(branchId: String, since: Long): List<Inventory> = queryIncremental("inventory", since, branchId).map { Json.decodeFromJsonElement(it) }
+
+    override suspend fun fetchAttendance(userId: String): List<AttendanceRecord> {
+        return queryDocuments("attendance").mapNotNull { 
+            try { Json.decodeFromJsonElement<AttendanceRecord>(it) } catch(e: Exception) { null }
+        }.filter { it.userId == userId }
+    }
+
+    override suspend fun fetchSchedules(employeeId: Long): List<Schedule> {
+        return queryDocuments("schedules").mapNotNull {
+            try { Json.decodeFromJsonElement<Schedule>(it) } catch(e: Exception) { null }
+        }.filter { it.employeeId == employeeId }
+    }
+
+    override suspend fun fetchEmployees(): List<Employee> {
+        return queryDocuments("employees").mapNotNull {
+            try { Json.decodeFromJsonElement<Employee>(it) } catch(e: Exception) { null }
+        }
+    }
 
     override suspend fun fetchUsers(): List<User> = listDocuments("users").map { Json.decodeFromJsonElement(it) }
     suspend fun fetchUsersIncremental(since: Long): List<User> = queryIncremental("users", since).map { Json.decodeFromJsonElement(it) }

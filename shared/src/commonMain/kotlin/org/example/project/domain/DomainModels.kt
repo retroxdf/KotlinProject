@@ -15,8 +15,19 @@ data class AppSettings(val key: String, val value: String)
 data class UserPanelStats(
     val daysWorked: Int,
     val restDay: String,
+    val checkInTime: Long?,
+    val checkOutTime: Long?,
+    val dailyBasePay: Double,
     val earnings: Double,
-    val bonus: Double
+    val bonus: Double,
+    val weekDetails: List<DayStatusInfo>
+)
+
+@Serializable
+data class DayStatusInfo(
+    val name: String,
+    val status: String, // TRABAJADO, PENDIENTE, DESCANSO, FALTA
+    val amount: Double
 )
 
 @Serializable

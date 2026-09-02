@@ -740,7 +740,7 @@ interface PurchaseUnitDao {
         DeletionLogEntity::class,
         ProductReturnEntity::class
     ],
-    version = 53
+    version = 54
 )
 @ConstructedBy(PosDatabaseConstructor::class)
 abstract class PosDatabase : RoomDatabase() {

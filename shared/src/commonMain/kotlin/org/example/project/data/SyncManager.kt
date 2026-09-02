@@ -10,6 +10,7 @@ class SyncManager(
     private val productRepository: ProductRepository,
     private val branchRepository: BranchRepository,
     private val userRepository: UserRepository,
+    private val employeeRepository: EmployeeRepository,
     private val customerRepository: CustomerRepository,
     private val settingsRepository: SettingsRepository,
     private val scope: CoroutineScope
@@ -47,6 +48,7 @@ class SyncManager(
                     // Descargar todo una sola vez
                     productRepository.refreshProducts(isInitial = true)
                     userRepository.refreshUsers()
+                    employeeRepository.refreshEmployees()
                     branchRepository.refreshBranches()
                     customerRepository.refreshCustomers()
                     

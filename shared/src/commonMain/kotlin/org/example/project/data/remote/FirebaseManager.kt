@@ -15,6 +15,9 @@ import com.abtsplazita.posplazita.domain.Inventory
 import com.abtsplazita.posplazita.domain.WebOrder
 import com.abtsplazita.posplazita.domain.DeletionRequest
 import com.abtsplazita.posplazita.domain.DeletionLog
+import com.abtsplazita.posplazita.domain.AttendanceRecord
+import com.abtsplazita.posplazita.domain.Schedule
+import com.abtsplazita.posplazita.domain.Employee
 
 class FirebaseManager {
     
@@ -200,6 +203,22 @@ class FirebaseManager {
         cloudProvider.syncDeletionLog(log)
     }
 
+    fun syncAttendance(record: AttendanceRecord) {
+        cloudProvider.syncAttendance(record)
+    }
+
+    fun syncSchedule(schedule: Schedule) {
+        cloudProvider.syncSchedule(schedule)
+    }
+
+    fun syncEmployee(employee: Employee) {
+        cloudProvider.syncEmployee(employee)
+    }
+
+    fun deleteEmployee(id: Long) {
+        cloudProvider.deleteEmployee(id)
+    }
+
     fun observeDeletionLogs(branchId: String, onUpdate: (List<DeletionLog>) -> Unit) {
         cloudProvider.observeDeletionLogs(branchId, onUpdate)
     }
@@ -227,6 +246,9 @@ class FirebaseManager {
     suspend fun fetchPreCuts(branchId: String) = cloudProvider.fetchPreCuts(branchId)
     suspend fun fetchDeletionLogs(branchId: String) = cloudProvider.fetchDeletionLogs(branchId)
     suspend fun fetchReturns(branchId: String) = cloudProvider.fetchReturns(branchId)
+    suspend fun fetchAttendance(userId: String) = cloudProvider.fetchAttendance(userId)
+    suspend fun fetchSchedules(employeeId: Long) = cloudProvider.fetchSchedules(employeeId)
+    suspend fun fetchEmployees() = cloudProvider.fetchEmployees()
 
     suspend fun fetchUsers() = cloudProvider.fetchUsers()
     suspend fun fetchBranches() = cloudProvider.fetchBranches()

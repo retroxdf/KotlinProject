@@ -1549,14 +1549,26 @@ class PosViewModel(
 
     fun moveFocus(delta: Int) {
         if (_showSearchResults.value) {
-            val count = searchResults.value.size
+            val count = _searchResults.value.size
             if (count > 0) {
                 _selectedSearchIndex.value = (_selectedSearchIndex.value + delta).coerceIn(0, count - 1)
             }
-        } else if (currentItems.value.isNotEmpty()) {
-            _currentFocusArea.value = FocusArea.CART
+        } else {
             val count = currentItems.value.size
-            _selectedCartIndex.value = (_selectedCartIndex.value + delta).coerceIn(0, count - 1)
+            if (_currentFocusArea.value == FocusArea.SEARCH_BAR) {
+                if (delta > 0 && count > 0) {
+                    _currentFocusArea.value = FocusArea.CART
+                    _selectedCartIndex.value = 0
+                }
+            } else if (_currentFocusArea.value == FocusArea.CART) {
+                val newIndex = _selectedCartIndex.value + delta
+                if (newIndex < 0) {
+                    _currentFocusArea.value = FocusArea.SEARCH_BAR
+                    _selectedCartIndex.value = 0
+                } else if (count > 0) {
+                    _selectedCartIndex.value = newIndex.coerceAtMost(count - 1)
+                }
+            }
         }
     }
 
@@ -1594,9 +1606,9 @@ class PosViewModel(
         _showCardSuccess.value = false
         val added = currentSaleManager.addItem(product, branchId, stock, quantity, isReturn = isReturn)
         if (added) {
-            // Auto-seleccionar el último item agregado
+            // Mantener el foco en la barra de búsqueda para seguir escaneando
             _selectedCartIndex.value = currentItems.value.size - 1
-            _currentFocusArea.value = FocusArea.CART
+            _currentFocusArea.value = FocusArea.SEARCH_BAR
         } else {
             setWarningMessage("Stock insuficiente para: ${product.name}")
         }

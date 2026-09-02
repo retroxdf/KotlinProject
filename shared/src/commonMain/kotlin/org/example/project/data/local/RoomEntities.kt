@@ -355,7 +355,8 @@ data class ScheduleEntity(
     val checkInTime: String?,
     val checkOutTime: String?,
     val isRestDay: Boolean = false,
-    val branchName: String? = null
+    val branchName: String? = null,
+    @ColumnInfo(defaultValue = "0") val isSynced: Boolean = false
 )
 
 @Entity
@@ -425,7 +426,8 @@ data class AttendanceEntity(
     val endTime: Long?,
     val hoursWorked: Double,
     val payAmount: Double,
-    val isClosed: Boolean
+    val isClosed: Boolean,
+    @ColumnInfo(defaultValue = "0") val isSynced: Boolean = false
 )
 
 @Entity

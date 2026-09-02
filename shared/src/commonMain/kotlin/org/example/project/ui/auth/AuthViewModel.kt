@@ -43,8 +43,37 @@ class AuthViewModel(
     private val _showUserPanel = MutableStateFlow(false)
     val showUserPanel = _showUserPanel.asStateFlow()
 
-    fun openUserPanel() { _showUserPanel.value = true }
+    fun openUserPanel() { 
+        _showUserPanel.value = true 
+        refreshStats()
+    }
     fun closeUserPanel() { _showUserPanel.value = false }
+
+    private var syncsToday = 0
+    private var lastSyncDate = ""
+
+    private fun refreshStats() {
+        val user = _currentUser.value ?: return
+        val tz = TimeZone.currentSystemDefault()
+        val now = Clock.System.now().toLocalDateTime(tz)
+        val dateStr = "${now.year}-${now.monthNumber}-${now.dayOfMonth}"
+        
+        if (dateStr != lastSyncDate) {
+            syncsToday = 0
+            lastSyncDate = dateStr
+        }
+        
+        if (syncsToday < 3) {
+            viewModelScope.launch {
+                try {
+                    employeeRepository?.refreshAttendance(user.username)
+                    user.employeeId?.let { employeeRepository?.refreshSchedules(it) }
+                    syncsToday++
+                    println("AUTH_VM: Sincronización de cuenta ($syncsToday/3 hoy)")
+                } catch (e: Exception) {}
+            }
+        }
+    }
 
     val userStats: StateFlow<UserPanelStats?> = combine(
         _currentUser,
@@ -55,9 +84,8 @@ class AuthViewModel(
                 val now = Clock.System.now()
                 val tz = TimeZone.currentSystemDefault()
                 val today = now.toLocalDateTime(tz)
-                val isoDay = today.dayOfWeek.ordinal + 1 
-                val daysToMonday = isoDay - 1
-                val mondayDate = today.date.minus(daysToMonday, DateTimeUnit.DAY)
+                val daysSinceMonday = today.dayOfWeek.ordinal 
+                val mondayDate = today.date.minus(daysSinceMonday, DateTimeUnit.DAY)
                 val mondayStart = mondayDate.atTime(0, 0).toInstant(tz).toEpochMilliseconds()
                 val sundayEnd = mondayDate.plus(6, DateTimeUnit.DAY).atTime(23, 59, 59).toInstant(tz).toEpochMilliseconds()
                 employeeRepository.getAttendanceInRange(user.username, mondayStart, sundayEnd)
@@ -65,20 +93,93 @@ class AuthViewModel(
         }
     ) { user, employees, schedules, attendance ->
         if (user == null) return@combine null
-        val employee = employees.find { it.id == user.employeeId }
-        val mySchedules = schedules.filter { it.employeeId == user.employeeId }
-        val restDay = mySchedules.find { it.isRestDay }?.let { 
+        
+        val employee = employees.find { 
+            it.id == user.employeeId || 
+            it.fullName.equals(user.username, ignoreCase = true) ||
+            it.fullName.contains(user.firstName, ignoreCase = true) ||
+            (user.username == "admin" && it.fullName.contains("ADMIN", ignoreCase = true))
+        }
+        val empId = employee?.id ?: user.employeeId
+        val mySchedules = if (empId != null) schedules.filter { it.employeeId == empId } else emptyList()
+        
+        val tz = TimeZone.currentSystemDefault()
+        val now = Clock.System.now()
+        val today = now.toLocalDateTime(tz)
+        
+        // Determinar el inicio de la semana (Lunes)
+        val daysSinceMonday = today.dayOfWeek.ordinal
+        val mondayDate = today.date.minus(daysSinceMonday, DateTimeUnit.DAY)
+        
+        val restDayStr = mySchedules.find { it.isRestDay }?.let { 
             when(it.dayOfWeek) {
                 1 -> "Lunes"; 2 -> "Martes"; 3 -> "Miércoles"; 4 -> "Jueves"; 5 -> "Viernes"; 6 -> "Sábado"; 7 -> "Domingo"; else -> "N/A"
             }
         } ?: "No definido"
-        val tz = TimeZone.currentSystemDefault()
-        val daysWorked = attendance.map { Instant.fromEpochMilliseconds(it.startTime).toLocalDateTime(tz).date }.distinct().size
-        val dailySalary = employee?.baseSalary ?: 0.0
-        val baseEarnings = daysWorked * dailySalary
+
+        val attendanceByDate = attendance.associateBy { Instant.fromEpochMilliseconds(it.startTime).toLocalDateTime(tz).date }
+        val daysWorked = attendanceByDate.size
+        
+        val baseSalary8h = employee?.baseSalary ?: 315.0
+        val hourlyRate = baseSalary8h / 8.0
+
+        // Construir detalles de la semana (Lunes a Domingo)
+        val dayNames = listOf("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+        val weekDetails = mutableListOf<DayStatusInfo>()
+        var hasAbsence = false
+        var accumulatedBaseEarnings = 0.0
+
+        for (i in 0..6) {
+            val dateToCheck = mondayDate.plus(i, DateTimeUnit.DAY)
+            val dow = i + 1
+            val sch = mySchedules.find { it.dayOfWeek == dow }
+            val record = attendanceByDate[dateToCheck]
+            
+            var dayAmount = 0.0
+            val status: String
+            
+            if (record != null) {
+                status = "TRABAJADO"
+                // Calcular ganancia del día según horario programado
+                var hours = 8.0
+                if (sch?.checkInTime != null && sch.checkOutTime != null) {
+                    try {
+                        val inP = sch.checkInTime!!.split(":")
+                        val outP = sch.checkOutTime!!.split(":")
+                        hours = ((outP[0].toInt() * 60 + outP[1].toInt()) - (inP[0].toInt() * 60 + inP[1].toInt())) / 60.0
+                    } catch (e: Exception) {}
+                }
+                dayAmount = hours * hourlyRate
+                accumulatedBaseEarnings += dayAmount
+            } else if (sch?.isRestDay == true) {
+                status = "DESCANSO"
+            } else if (dateToCheck < today.date) {
+                status = "FALTA"
+                hasAbsence = true
+            } else {
+                status = "PENDIENTE"
+            }
+            
+            weekDetails.add(DayStatusInfo(dayNames[i], status, dayAmount))
+        }
+
+        // Bono de 200 dividido entre 6 días. Penalty si hay falta.
         val dailyBonus = 200.0 / 6.0
-        val earnedBonus = daysWorked * dailyBonus
-        UserPanelStats(daysWorked = daysWorked, restDay = restDay, earnings = baseEarnings + earnedBonus, bonus = earnedBonus)
+        val earnedBonus = if (hasAbsence) 0.0 else daysWorked * dailyBonus
+        
+        // Info de hoy para el panel izquierdo
+        val todayRecord = attendanceByDate[today.date]
+
+        UserPanelStats(
+            daysWorked = daysWorked,
+            restDay = restDayStr,
+            checkInTime = todayRecord?.startTime,
+            checkOutTime = todayRecord?.endTime,
+            dailyBasePay = weekDetails.find { it.name == dayNames[today.dayOfWeek.ordinal] }?.amount ?: 0.0,
+            earnings = accumulatedBaseEarnings + earnedBonus,
+            bonus = earnedBonus,
+            weekDetails = weekDetails
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val allUsers = userRepository.getAllUsers()
