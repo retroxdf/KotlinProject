@@ -7,6 +7,8 @@ import com.abtsplazita.posplazita.domain.Sale
 import com.abtsplazita.posplazita.domain.SaleItem
 import com.abtsplazita.posplazita.domain.Customer
 import com.abtsplazita.posplazita.domain.TicketConfig
+import com.abtsplazita.posplazita.domain.formatPrice
+import com.abtsplazita.posplazita.domain.TicketAlignment
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.*
@@ -60,6 +62,60 @@ class AndroidPrinterManager : PrinterManager {
                 
                 outputStream.write(content.toByteArray(Charsets.ISO_8859_1))
                 outputStream.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A))
+
+                if (autoCut) {
+                    outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))
+                }
+            }
+        }
+    }
+
+    override fun printDebtPayment(
+        customer: Customer,
+        amountPaid: Double,
+        remainingDebt: Double,
+        config: TicketConfig?,
+        branchName: String?
+    ) {
+        if (connectionType == "BLUETOOTH") {
+            printViaBluetooth { outputStream ->
+                if (openDrawerOnPrint) {
+                    outputStream.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
+                }
+
+                val lineChars = if (paperSize == 58) 30 else 40
+                val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+                val dateStr = sdf.format(Date())
+                
+                val divider = "-".repeat(lineChars)
+                val sb = StringBuilder()
+                sb.append("\n")
+                sb.append(alignText(branchName ?: "PLAZITA POS", lineChars, TicketAlignment.CENTER) + "\n")
+                sb.append(divider + "\n")
+                sb.append(alignText("COMPROBANTE DE ABONO", lineChars, TicketAlignment.CENTER) + "\n")
+                sb.append(divider + "\n")
+                sb.append("FECHA:   $dateStr\n")
+                sb.append("CLIENTE: ${customer.name}\n")
+                sb.append(divider + "\n")
+                
+                val prevDebtLabel = "SALDO ANTERIOR:"
+                val prevDebtVal = "$${(remainingDebt + amountPaid).formatPrice()}"
+                sb.append(prevDebtLabel.padEnd(lineChars - prevDebtVal.length) + prevDebtVal + "\n")
+                
+                val paidLabel = "MONTO ABONADO:"
+                val paidVal = "$${amountPaid.formatPrice()}"
+                sb.append(paidLabel.padEnd(lineChars - paidVal.length) + paidVal + "\n")
+                
+                sb.append(divider + "\n")
+                
+                val newDebtLabel = "NUEVO SALDO:"
+                val newDebtVal = "$${remainingDebt.formatPrice()}"
+                sb.append(newDebtLabel.padEnd(lineChars - newDebtVal.length) + newDebtVal + "\n")
+                
+                sb.append(divider + "\n")
+                sb.append("\n" + alignText("GRACIAS POR SU PAGO", lineChars, TicketAlignment.CENTER) + "\n\n\n\n")
+
+                outputStream.write(sb.toString().toByteArray(Charsets.ISO_8859_1))
 
                 if (autoCut) {
                     outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))

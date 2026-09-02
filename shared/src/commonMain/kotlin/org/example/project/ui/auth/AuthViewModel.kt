@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import com.abtsplazita.posplazita.domain.User
+import com.abtsplazita.posplazita.domain.*
+import kotlinx.datetime.*
+import kotlinx.coroutines.flow.combine
 import com.abtsplazita.posplazita.domain.repository.UserRepository
 import com.abtsplazita.posplazita.domain.repository.EmployeeRepository
 import com.abtsplazita.posplazita.domain.repository.SettingsRepository
@@ -37,6 +39,47 @@ class AuthViewModel(
 
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
+
+    private val _showUserPanel = MutableStateFlow(false)
+    val showUserPanel = _showUserPanel.asStateFlow()
+
+    fun openUserPanel() { _showUserPanel.value = true }
+    fun closeUserPanel() { _showUserPanel.value = false }
+
+    val userStats: StateFlow<UserPanelStats?> = combine(
+        _currentUser,
+        employeeRepository?.allEmployees ?: flowOf(emptyList()),
+        employeeRepository?.allSchedules ?: flowOf(emptyList()),
+        _currentUser.flatMapLatest { user ->
+            if (user != null && employeeRepository != null) {
+                val now = Clock.System.now()
+                val tz = TimeZone.currentSystemDefault()
+                val today = now.toLocalDateTime(tz)
+                val isoDay = today.dayOfWeek.ordinal + 1 
+                val daysToMonday = isoDay - 1
+                val mondayDate = today.date.minus(daysToMonday, DateTimeUnit.DAY)
+                val mondayStart = mondayDate.atTime(0, 0).toInstant(tz).toEpochMilliseconds()
+                val sundayEnd = mondayDate.plus(6, DateTimeUnit.DAY).atTime(23, 59, 59).toInstant(tz).toEpochMilliseconds()
+                employeeRepository.getAttendanceInRange(user.username, mondayStart, sundayEnd)
+            } else flowOf(emptyList())
+        }
+    ) { user, employees, schedules, attendance ->
+        if (user == null) return@combine null
+        val employee = employees.find { it.id == user.employeeId }
+        val mySchedules = schedules.filter { it.employeeId == user.employeeId }
+        val restDay = mySchedules.find { it.isRestDay }?.let { 
+            when(it.dayOfWeek) {
+                1 -> "Lunes"; 2 -> "Martes"; 3 -> "Miércoles"; 4 -> "Jueves"; 5 -> "Viernes"; 6 -> "Sábado"; 7 -> "Domingo"; else -> "N/A"
+            }
+        } ?: "No definido"
+        val tz = TimeZone.currentSystemDefault()
+        val daysWorked = attendance.map { Instant.fromEpochMilliseconds(it.startTime).toLocalDateTime(tz).date }.distinct().size
+        val dailySalary = employee?.baseSalary ?: 0.0
+        val baseEarnings = daysWorked * dailySalary
+        val dailyBonus = 200.0 / 6.0
+        val earnedBonus = daysWorked * dailyBonus
+        UserPanelStats(daysWorked = daysWorked, restDay = restDay, earnings = baseEarnings + earnedBonus, bonus = earnedBonus)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val allUsers = userRepository.getAllUsers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList<User>())

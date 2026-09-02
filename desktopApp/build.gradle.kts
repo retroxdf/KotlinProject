@@ -21,9 +21,19 @@ compose.desktop {
         mainClass = "com.abtsplazita.posplazita.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "com.abtsplazita.posplazita"
+            targetFormats(TargetFormat.Exe, TargetFormat.Msi)
+            packageName = "PlazitaPOS"
             packageVersion = "1.0.0"
+            description = "Plazita Point of Sale System"
+            copyright = "© 2026 ABTS Plazita"
+            vendor = "ABTS Plazita"
+            windows {
+                menu = true
+                shortcut = true
+                iconFile.set(project.file("src/main/resources/LA_PLAZITA.ico"))
+                // Agregar un upgradeUuid para que Windows reconozca actualizaciones correctamente
+                upgradeUuid = "68c92a54-7243-41c3-8815-5e60d3d573f0"
+            }
         }
     }
 }

@@ -637,6 +637,9 @@ interface AttendanceDao {
 
     @Update
     suspend fun updateAttendance(attendance: AttendanceEntity)
+
+    @Query("SELECT * FROM AttendanceEntity WHERE userId = :userId AND startTime BETWEEN :start AND :end")
+    fun getAttendanceInRange(userId: String, start: Long, end: Long): Flow<List<AttendanceEntity>>
 }
 
 @Dao

@@ -25,6 +25,7 @@ import com.abtsplazita.posplazita.domain.repository.CashOutRepository
 import com.abtsplazita.posplazita.domain.repository.PreCutRepository
 import com.abtsplazita.posplazita.domain.repository.EmployeeRepository
 import com.abtsplazita.posplazita.domain.repository.UserRepository
+import kotlinx.datetime.*
 import kotlin.math.abs
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -103,7 +104,7 @@ class PosViewModel(
                 pendingAction?.invoke()
                 closeAuthDialog()
             } else {
-                _errorMessage.value = "NIP de administrador inválido o sin permisos."
+                setErrorMessage("NIP de administrador inválido o sin permisos.")
                 playErrorSound()
             }
         }
@@ -314,7 +315,7 @@ class PosViewModel(
                     }
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Error al actualizar estado: ${e.message}"
+                setErrorMessage("Error al actualizar estado: ${e.message}")
             }
         }
     }
@@ -431,7 +432,7 @@ class PosViewModel(
                 _showAddCustomerDialog.value = true 
             }
         } else {
-            _errorMessage.value = "No tienes permiso para crear clientes."
+            setErrorMessage("No tienes permiso para crear clientes.")
         }
     }
 
@@ -450,9 +451,9 @@ class PosViewModel(
                 _selectedCustomer.value = toSave
                 _editingCustomer.value = null
                 _showAddCustomerDialog.value = false
-                _warningMessage.value = "Cliente '${toSave.name}' guardado y seleccionado."
+                setWarningMessage("Cliente '${toSave.name}' guardado y seleccionado.")
             } catch (e: Exception) {
-                _errorMessage.value = "Error al guardar cliente: ${e.message}"
+                setErrorMessage("Error al guardar cliente: ${e.message}")
             }
         }
     }
@@ -480,7 +481,7 @@ class PosViewModel(
                 _selectedCustomer.value = newCustomer
                 closeAddCustomerDialog(shouldReopenSelection = false)
             } catch (e: Exception) {
-                _errorMessage.value = "Error al guardar cliente: ${e.message}"
+                setErrorMessage("Error al guardar cliente: ${e.message}")
             }
         }
     }
@@ -507,11 +508,25 @@ class PosViewModel(
                     timestamp = currentTimeMillis(),
                     userId = _currentUser.value?.username ?: "admin"
                 ))
-                _selectedCustomer.value = customerRepository?.getCustomerById(customer.id)
+                
+                val updatedCustomer = customerRepository?.getCustomerById(customer.id)
+                _selectedCustomer.value = updatedCustomer
+                
+                // Imprimir comprobante de abono
+                if (updatedCustomer != null) {
+                    printerManager?.printDebtPayment(
+                        customer = updatedCustomer,
+                        amountPaid = amount,
+                        remainingDebt = updatedCustomer.currentDebt,
+                        config = _ticketConfig.value,
+                        branchName = _branchName.value
+                    )
+                }
+
                 closeDebtPaymentDialog()
-                _warningMessage.value = "Abono de $${amount.formatPrice()} registrado correctamente."
+                setWarningMessage("Abono de $${amount.formatPrice()} registrado e impreso.")
             } catch (e: Exception) {
-                _errorMessage.value = "Error al procesar abono: ${e.message}"
+                setErrorMessage("Error al procesar abono: ${e.message}")
             }
         }
     }
@@ -545,7 +560,7 @@ class PosViewModel(
             // Validar límite de 2 precortes por día
             val countToday = preCutRepository?.getPreCutCountForUserToday(currentUserId) ?: 0
             if (countToday >= 2) {
-                _errorMessage.value = "Límite alcanzado: Solo se permiten 2 precortes por usuario al día."
+                setErrorMessage("Límite alcanzado: Solo se permiten 2 precortes por usuario al día.")
                 return@launch
             }
 
@@ -657,7 +672,7 @@ class PosViewModel(
         if (newQty > 0) {
             // Validar granel
             if (!item.isBulk && (newQty % 1.0 != 0.0)) {
-                _errorMessage.value = "El producto '${item.productName}' no permite venta fraccionada (Granel)."
+                setErrorMessage("El producto '${item.productName}' no permite venta fraccionada (Granel).")
                 playErrorSound()
                 return
             }
@@ -712,7 +727,7 @@ class PosViewModel(
             if (weight != null && weight > 0) {
                 _bulkQuantityText.value = TextFieldValue(weight.toString())
             } else {
-                _errorMessage.value = "No se pudo obtener peso de la báscula."
+                setErrorMessage("No se pudo obtener peso de la báscula.")
             }
         }
     }
@@ -779,7 +794,7 @@ class PosViewModel(
                 closeRechargeDialog()
                 onDone()
             } catch (e: Exception) {
-                _errorMessage.value = "Error al procesar recarga: ${e.message}"
+                setErrorMessage("Error al procesar recarga: ${e.message}")
             } finally {
                 _isProcessingRecharge.value = false
             }
@@ -856,7 +871,7 @@ class PosViewModel(
                 closeServiceDialog()
                 onDone()
             } catch (e: Exception) {
-                _errorMessage.value = "Error al procesar servicio: ${e.message}"
+                setErrorMessage("Error al procesar servicio: ${e.message}")
             } finally {
                 _isProcessingService.value = false
             }
@@ -878,7 +893,7 @@ class PosViewModel(
         
         // Limitar a máximo 5 ventas en espera
         if (heldSales.value.size >= 5) {
-            _errorMessage.value = "Límite alcanzado: Solo puedes tener 5 ventas en espera."
+            setErrorMessage("Límite alcanzado: Solo puedes tener 5 ventas en espera.")
             playErrorSound()
             return
         }
@@ -896,7 +911,7 @@ class PosViewModel(
             saleRepository.saveHeldSale(heldSale)
             // Usar limpieza automática (isManual = false) para no pedir PIN al guardar
             clearSale(isManual = false)
-            _warningMessage.value = "Venta guardada en espera."
+            setWarningMessage("Venta guardada en espera.")
         }
     }
 
@@ -986,10 +1001,10 @@ class PosViewModel(
                     status = "PENDING"
                 )
                 firebaseManager?.syncDeletionRequest(request)
-                _warningMessage.value = "Solicitud enviada a revisión del administrador."
+                setWarningMessage("Solicitud enviada a revisión del administrador.")
             }
         } else {
-            _errorMessage.value = "No tienes permiso para eliminar ventas guardadas."
+            setErrorMessage("No tienes permiso para eliminar ventas guardadas.")
         }
     }
 
@@ -1059,7 +1074,7 @@ class PosViewModel(
                     }
                     return@launch
                 } else {
-                    _errorMessage.value = "No tienes permiso para vender a crédito."
+                    setErrorMessage("No tienes permiso para vender a crédito.")
                     return@launch
                 }
             }
@@ -1073,7 +1088,7 @@ class PosViewModel(
         viewModelScope.launch {
             // 1. Validar que haya una caja seleccionada
             if (_selectedTerminal.value == null) {
-                _errorMessage.value = "Debes seleccionar una caja (terminal) antes de cobrar."
+                setErrorMessage("Debes seleccionar una caja (terminal) antes de cobrar.")
                 playErrorSound()
                 return@launch
             }
@@ -1088,7 +1103,7 @@ class PosViewModel(
             // --- LÓGICA DE MERCADO PAGO ---
             if (isMP) {
                 if (mercadoPagoManager == null) {
-                    _errorMessage.value = "Servicio de Mercado Pago no inicializado."
+                    setErrorMessage("Servicio de Mercado Pago no inicializado.")
                     return@launch
                 }
 
@@ -1097,7 +1112,7 @@ class PosViewModel(
                 val accessToken = settings["mp_access_token"] ?: ""
                 
                 if (deviceId.isBlank() || accessToken.isBlank()) {
-                    _errorMessage.value = "Mercado Pago no configurado (Token o Terminal falta)."
+                    setErrorMessage("Mercado Pago no configurado (Token o Terminal falta).")
                     return@launch
                 }
                 
@@ -1158,13 +1173,13 @@ class PosViewModel(
                     _isWaitingForMP.value = false
                     if (!paid) {
                         val status = _mpStatus.value ?: "desconocido"
-                        _errorMessage.value = "Pago no completado: $status"
+                        setErrorMessage("Pago no completado: $status")
                         _isProcessingSale.value = false
                         return@launch
                     }
                 } else {
                     _isWaitingForMP.value = false
-                    _errorMessage.value = "Error al conectar con Point: $intentId"
+                    setErrorMessage("Error al conectar con Point: $intentId")
                     return@launch
                 }
             }
@@ -1172,7 +1187,7 @@ class PosViewModel(
             _isProcessingSale.value = true
             try {
                 if (paymentMethod == "Efectivo" && amountPaid < currentTotal) {
-                    _errorMessage.value = "El monto pagado es insuficiente."
+                    setErrorMessage("El monto pagado es insuficiente.")
                     _isProcessingSale.value = false
                     return@launch
                 }
@@ -1180,7 +1195,7 @@ class PosViewModel(
                 if (paymentMethod == "Monedero") {
                     val balance = _selectedCustomer.value?.walletBalance ?: 0.0
                     if (balance < currentTotal) {
-                        _errorMessage.value = "Saldo insuficiente en monedero ($${balance.formatPrice()})."
+                        setErrorMessage("Saldo insuficiente en monedero ($${balance.formatPrice()}).")
                         _isProcessingSale.value = false
                         return@launch
                     }
@@ -1188,7 +1203,7 @@ class PosViewModel(
 
                 // 2. Validar cliente para crédito
                 if (isCredit && customerId == null) {
-                    _errorMessage.value = "Debes seleccionar un cliente para realizar una venta a crédito."
+                    setErrorMessage("Debes seleccionar un cliente para realizar una venta a crédito.")
                     _isProcessingSale.value = false
                     return@launch
                 }
@@ -1219,13 +1234,12 @@ class PosViewModel(
                 
                 _saleChange.value = sale.changeAmount
                 _showSaleSuccessOverlay.value = true
-                viewModelScope.launch {
-                    delay(60000)
-                    if (_showSaleSuccessOverlay.value) {
-                        _showSaleSuccessOverlay.value = false
-                        _saleChange.value = null
-                        _showCardSuccess.value = false
-                    }
+                successJob?.cancel()
+                successJob = viewModelScope.launch {
+                    delay(2000)
+                    _showSaleSuccessOverlay.value = false
+                    _saleChange.value = null
+                    _showCardSuccess.value = false
                 }
 
                 // 3. Lógica de Monedero Electrónico (Acumulación y Pago)
@@ -1299,7 +1313,7 @@ class PosViewModel(
                 clearSale(isManual = false)
                 onDone()
             } catch (e: Exception) {
-                _errorMessage.value = "Error al procesar venta: ${e.message}"
+                setErrorMessage("Error al procesar venta: ${e.message}")
             } finally {
                 _isProcessingSale.value = false
             }
@@ -1373,9 +1387,9 @@ class PosViewModel(
                 )
                 deletionLogRepository?.saveLog(log)
                 
-                _warningMessage.value = "Borrado Exitoso: Ticket aprobado para eliminación."
+                setWarningMessage("Borrado Exitoso: Ticket aprobado para eliminación.")
             } catch (e: Exception) {
-                _errorMessage.value = "Error al aprobar: ${e.message}"
+                setErrorMessage("Error al aprobar: ${e.message}")
             }
         }
     }
@@ -1384,9 +1398,9 @@ class PosViewModel(
         viewModelScope.launch {
             try {
                 firebaseManager?.deleteDeletionRequest(request.id)
-                _warningMessage.value = "Solicitud rechazada."
+                setWarningMessage("Solicitud rechazada.")
             } catch (e: Exception) {
-                _errorMessage.value = "Error al rechazar: ${e.message}"
+                setErrorMessage("Error al rechazar: ${e.message}")
             }
         }
     }
@@ -1430,7 +1444,7 @@ class PosViewModel(
                     
                     val item = items[index]
                     if (!item.isBulk && (value % 1.0 != 0.0)) {
-                        _errorMessage.value = "El producto '${item.productName}' no permite venta fraccionada (Granel)."
+                        setErrorMessage("El producto '${item.productName}' no permite venta fraccionada (Granel).")
                         playErrorSound()
                     } else {
                         currentSaleManager.updateItemQuantity(item, value)
@@ -1483,7 +1497,7 @@ class PosViewModel(
                 val mult = _searchMultiplier.value
                 if (mult != null) {
                     if (!exactMatch.isBulk && (mult % 1.0 != 0.0)) {
-                        _errorMessage.value = "El producto '${exactMatch.name}' no permite venta fraccionada (Granel)."
+                        setErrorMessage("El producto '${exactMatch.name}' no permite venta fraccionada (Granel).")
                         playErrorSound()
                         return@launch
                     }
@@ -1559,7 +1573,7 @@ class PosViewModel(
         
         if (mult != null) {
             if (!product.isBulk && (mult % 1.0 != 0.0)) {
-                _errorMessage.value = "El producto '${product.name}' no permite venta fraccionada (Granel)."
+                setErrorMessage("El producto '${product.name}' no permite venta fraccionada (Granel).")
                 playErrorSound()
                 return
             }
@@ -1584,7 +1598,7 @@ class PosViewModel(
             _selectedCartIndex.value = currentItems.value.size - 1
             _currentFocusArea.value = FocusArea.CART
         } else {
-            _warningMessage.value = "Stock insuficiente para: ${product.name}"
+            setWarningMessage("Stock insuficiente para: ${product.name}")
         }
     }
 
@@ -1637,23 +1651,33 @@ class PosViewModel(
     }
 
     // --- Otros ---
+    private var errorJob: kotlinx.coroutines.Job? = null
+    private var warningJob: kotlinx.coroutines.Job? = null
+    private var successJob: kotlinx.coroutines.Job? = null
+
     fun clearError() { 
+        errorJob?.cancel()
         _errorMessage.value = null 
         selectSearchQuery()
     }
     fun setErrorMessage(msg: String) { 
+        errorJob?.cancel()
         _errorMessage.value = msg 
-        viewModelScope.launch {
-            delay(3000)
-            if (_errorMessage.value == msg) _errorMessage.value = null
+        errorJob = viewModelScope.launch {
+            delay(2000)
+            _errorMessage.value = null
         }
     }
-    fun clearWarning() { _warningMessage.value = null }
+    fun clearWarning() { 
+        warningJob?.cancel()
+        _warningMessage.value = null 
+    }
     fun setWarningMessage(msg: String) {
+        warningJob?.cancel()
         _warningMessage.value = msg
-        viewModelScope.launch {
-            delay(3000)
-            if (_warningMessage.value == msg) _warningMessage.value = null
+        warningJob = viewModelScope.launch {
+            delay(2000)
+            _warningMessage.value = null
         }
     }
     fun closeNotFoundDialog() { 
@@ -1725,7 +1749,7 @@ class PosViewModel(
         val type = _showCashMovementDialog.value ?: (if (amount >= 0) CashMovementType.IN else CashMovementType.OUT)
         val absAmount = abs(amount)
         if (isManual && type == CashMovementType.OUT && absAmount > _cashInDrawer.value) {
-            _errorMessage.value = "No hay fondo suficiente ($${_cashInDrawer.value.formatPrice()})."
+                setErrorMessage("No hay fondo suficiente ($${_cashInDrawer.value.formatPrice()}).")
             return
         }
         viewModelScope.launch {
@@ -1742,7 +1766,7 @@ class PosViewModel(
             )
             cashMovementRepository?.saveMovement(movement)
             if (isManual) {
-                _warningMessage.value = "${if(type == CashMovementType.IN) "Entrada" else "Salida"} registrada."
+                setWarningMessage("${if(type == CashMovementType.IN) "Entrada" else "Salida"} registrada.")
                 closeCashMovementDialog()
             }
         }
@@ -1770,17 +1794,17 @@ class PosViewModel(
         
         viewModelScope.launch {
             if (_selectedTerminal.value == null) {
-                _errorMessage.value = "Debes seleccionar una caja (terminal) para registrar el retiro."
+                setErrorMessage("Debes seleccionar una caja (terminal) para registrar el retiro.")
                 return@launch
             }
 
             if (mercadoPagoManager == null) {
-                _errorMessage.value = "Mercado Pago no está configurado."
+                setErrorMessage("Mercado Pago no está configurado.")
                 return@launch
             }
 
             if (withdrawalAmount > _cashInDrawer.value) {
-                _errorMessage.value = "No hay suficiente efectivo en caja para este retiro."
+                setErrorMessage("No hay suficiente efectivo en caja para este retiro.")
                 return@launch
             }
 
@@ -1790,7 +1814,7 @@ class PosViewModel(
                 val deviceId = settings["mp_terminal_id"] ?: ""
                 
                 if (deviceId.isBlank()) {
-                    _errorMessage.value = "Terminal Point no configurada."
+                    setErrorMessage("Terminal Point no configurada.")
                     _isProcessingWithdrawal.value = false
                     return@launch
                 }
@@ -1858,17 +1882,17 @@ class PosViewModel(
                             addCashMovement(commission, "Comisión por retiro (Efectivo)", isManual = false)
                         }
 
-                        _warningMessage.value = "Retiro procesado correctamente.\nEntrega $${withdrawalAmount.formatPrice()} al cliente."
+                        setWarningMessage("Retiro procesado correctamente.\nEntrega $${withdrawalAmount.formatPrice()} al cliente.")
                         closeWithdrawalDialog()
                     } else {
                         val status = _mpStatus.value ?: "desconocido"
-                        _errorMessage.value = "Cobro en tarjeta no completado: $status"
+                        setErrorMessage("Cobro en tarjeta no completado: $status")
                     }
                 } else {
-                    _errorMessage.value = "Error al conectar con Point: $intentId"
+                    setErrorMessage("Error al conectar con Point: $intentId")
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Error en retiro: ${e.message}"
+                setErrorMessage("Error en retiro: ${e.message}")
             } finally {
                 _isProcessingWithdrawal.value = false
                 _mpStatus.value = null
@@ -1931,9 +1955,9 @@ class PosViewModel(
                 )
                 cashMovementRepository?.saveMovement(movement)
                 closeReturnDialog()
-                _warningMessage.value = "Devolución procesada."
+                setWarningMessage("Devolución procesada.")
             } catch (e: Exception) {
-                _errorMessage.value = "Error: ${e.message}"
+                setErrorMessage("Error: ${e.message}")
             }
         }
     }
@@ -1947,9 +1971,9 @@ class PosViewModel(
             try {
                 repository.refreshProducts(isInitial = false)
                 repository.refreshInventory(branchId, isInitial = false)
-                _warningMessage.value = "Sincronización incremental completada."
+                setWarningMessage("Sincronización incremental completada.")
             } catch (e: Exception) {
-                _errorMessage.value = "Error al sincronizar: ${e.message}"
+                setErrorMessage("Error al sincronizar: ${e.message}")
             }
         }
     }

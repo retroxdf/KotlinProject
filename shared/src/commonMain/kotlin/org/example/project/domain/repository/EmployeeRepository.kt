@@ -116,6 +116,10 @@ class EmployeeRepository(
         attendanceDao.updateAttendance(record.toEntity())
     }
 
+    fun getAttendanceInRange(userId: String, start: Long, end: Long): Flow<List<AttendanceRecord>> {
+        return attendanceDao.getAttendanceInRange(userId, start, end).map { list -> list.map { it.toDomain() } }
+    }
+
     suspend fun insertPaymentRecord(record: PaymentRecord) = paymentRecordDao.insertPaymentRecord(record.toEntity())
 
     suspend fun deletePaymentRecord(record: PaymentRecord) = paymentRecordDao.deletePaymentRecord(record.toEntity())

@@ -22,6 +22,17 @@ interface PrinterManager {
     )
     
     /**
+     * Imprime un comprobante de abono a deuda.
+     */
+    fun printDebtPayment(
+        customer: Customer,
+        amountPaid: Double,
+        remainingDebt: Double,
+        config: TicketConfig? = null,
+        branchName: String? = null
+    )
+
+    /**
      * Imprime una tarjeta de membresía para un cliente (Formato Gafete).
      */
     fun printMemberCard(customer: Customer)
@@ -180,7 +191,7 @@ fun buildTicketContentCommon(
     return sb.toString()
 }
 
-private fun alignText(text: String, lineChars: Int, alignment: com.abtsplazita.posplazita.domain.TicketAlignment): String {
+fun alignText(text: String, lineChars: Int, alignment: com.abtsplazita.posplazita.domain.TicketAlignment): String {
     val cleanText = text.trim().replace("\t", " ")
     return when (alignment) {
         com.abtsplazita.posplazita.domain.TicketAlignment.LEFT -> cleanText
@@ -233,6 +244,17 @@ class MockPrinterManager : PrinterManager {
         if (walletBalance != null) {
             println("Saldo Monedero: $walletBalance")
         }
+    }
+
+    override fun printDebtPayment(
+        customer: Customer,
+        amountPaid: Double,
+        remainingDebt: Double,
+        config: TicketConfig?,
+        branchName: String?
+    ) {
+        println("=== ENVIANDO ABONO A IMPRESORA: $printerName ===")
+        println("CLIENTE: ${customer.name} | ABONO: $amountPaid | RESTANTE: $remainingDebt")
     }
 
     override fun printMemberCard(customer: Customer) {

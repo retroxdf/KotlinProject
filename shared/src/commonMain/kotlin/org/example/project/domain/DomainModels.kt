@@ -12,6 +12,14 @@ data class Tax(val id: String, val name: String, val rate: Double)
 data class AppSettings(val key: String, val value: String)
 
 @Serializable
+data class UserPanelStats(
+    val daysWorked: Int,
+    val restDay: String,
+    val earnings: Double,
+    val bonus: Double
+)
+
+@Serializable
 data class Branch(
     val id: String,
     val name: String,

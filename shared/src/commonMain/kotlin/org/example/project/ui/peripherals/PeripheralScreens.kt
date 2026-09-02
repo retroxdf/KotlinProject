@@ -1535,9 +1535,25 @@ fun ServicesSettingsSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) 
 @Composable
 fun MarketingSettingsSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) {
     val adImages by viewModel.adImages.collectAsState()
+    val appLogoUrl by viewModel.appLogoUrl.collectAsState()
     var newUrl by remember { mutableStateOf("") }
+    var logoUrlEdit by remember(appLogoUrl) { mutableStateOf(appLogoUrl) }
 
-    SubMenuLayout(title = "Publicidad", onBack = onBack) {
+    SubMenuLayout(title = "Imagen y Publicidad", onBack = onBack) {
+        // --- SECCION LOGO ---
+        Text("Logotipo del Sistema", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("URL del logo que aparece en el inicio de sesión", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(value = logoUrlEdit, onValueChange = { logoUrlEdit = it }, label = { Text("URL del Logo") }, modifier = Modifier.weight(1f))
+            Button(onClick = { viewModel.updateAppLogoUrl(logoUrlEdit) }, modifier = Modifier.height(56.dp)) { Text("Guardar") }
+        }
+        
+        Spacer(Modifier.height(32.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+
+        // --- SECCION PUBLICIDAD ---
         Text("Imágenes del Carrusel", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text("Las imágenes rotarán cada 2 minutos en la pantalla de ventas", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         Spacer(modifier = Modifier.height(16.dp))

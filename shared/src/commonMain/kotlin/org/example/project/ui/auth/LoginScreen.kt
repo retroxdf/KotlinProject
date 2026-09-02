@@ -6,8 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,10 +23,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.layout.ContentScale
 import com.abtsplazita.posplazita.domain.User
+import io.kamel.image.KamelImage
+import io.kamel.image.asyncPainterResource
 
 @Composable
-fun LoginScreen(viewModel: AuthViewModel) {
+fun LoginScreen(viewModel: AuthViewModel, logoUrl: String) {
     val users by viewModel.allUsers.collectAsState()
     val showNipPrompt by viewModel.showNipPrompt.collectAsState()
     val mustChangeNip by viewModel.mustChangeNip.collectAsState()
@@ -34,17 +38,41 @@ fun LoginScreen(viewModel: AuthViewModel) {
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.TopCenter) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally, 
-            modifier = Modifier.padding(top = 64.dp, start = 32.dp, end = 32.dp, bottom = 32.dp)
+            modifier = Modifier.padding(top = 48.dp, start = 32.dp, end = 32.dp, bottom = 32.dp)
         ) {
+            // Logo del Sistema
+            Card(
+                modifier = Modifier.size(120.dp),
+                shape = CircleShape,
+                elevation = CardDefaults.cardElevation(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Box(Modifier.fillMaxSize(), Alignment.Center) {
+                    KamelImage(
+                        resource = { asyncPainterResource(data = logoUrl) },
+                        contentDescription = "Logo",
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        contentScale = ContentScale.Fit,
+                        onLoading = { Icon(Icons.Default.Store, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary) },
+                        onFailure = { Icon(Icons.Default.Store, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary) }
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+
             Text(
-                "BIENVENIDO A POS PLAZITA",
-                style = MaterialTheme.typography.displaySmall,
+                "BIENVENIDO A PLAZITA POS",
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.primary
             )
             Text("Selecciona tu usuario para ingresar", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
             
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Versión 1.0.0", style = MaterialTheme.typography.labelSmall, color = Color.Gray.copy(alpha = 0.6f))
+            
+            Spacer(modifier = Modifier.height(44.dp))
 
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 180.dp),

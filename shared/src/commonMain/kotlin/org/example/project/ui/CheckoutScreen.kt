@@ -100,22 +100,6 @@ fun CheckoutScreen(
                 }
             )
         },
-        snackbarHost = {
-            errorMessage?.let { msg ->
-                Snackbar(
-                    modifier = Modifier.padding(16.dp),
-                    action = { TextButton(onClick = { viewModel.clearError() }) { Text("OK", color = Color.White) } },
-                    containerColor = MaterialTheme.colorScheme.error
-                ) { Text(msg) }
-            }
-            warningMessage?.let { msg ->
-                Snackbar(
-                    modifier = Modifier.padding(16.dp),
-                    action = { TextButton(onClick = { viewModel.clearWarning() }) { Text("OK", color = Color.White) } },
-                    containerColor = Color(0xFF4CAF50)
-                ) { Text(msg) }
-            }
-        }
     ) { padding ->
         BoxWithConstraints(modifier = Modifier.padding(padding).fillMaxSize()) {
             val isCompact = maxWidth < 700.dp
@@ -409,6 +393,41 @@ fun CheckoutScreen(
             onSave = { viewModel.saveNewCustomer() },
             onCancel = { viewModel.closeAddCustomerDialog() }
         )
+    }
+
+    // --- AVISOS FLOTANTES CENTRALIZADOS ---
+    if (errorMessage != null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Card(
+                modifier = Modifier.size(200.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error),
+                shape = RoundedCornerShape(24.dp),
+                elevation = CardDefaults.cardElevation(12.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Icon(Icons.Default.Error, null, tint = Color.White, modifier = Modifier.size(50.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(errorMessage!!, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
+
+    if (warningMessage != null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Card(
+                modifier = Modifier.size(200.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50)),
+                shape = RoundedCornerShape(24.dp),
+                elevation = CardDefaults.cardElevation(12.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Icon(Icons.Default.CheckCircle, null, tint = Color.White, modifier = Modifier.size(50.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(warningMessage!!, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
     }
 }
 

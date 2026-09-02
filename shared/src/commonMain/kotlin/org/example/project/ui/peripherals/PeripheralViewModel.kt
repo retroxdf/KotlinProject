@@ -99,6 +99,10 @@ class PeripheralViewModel(
     private val _isAiSyncing = MutableStateFlow(false)
     val isAiSyncing = _isAiSyncing.asStateFlow()
 
+    // --- Logo y Branding ---
+    private val _appLogoUrl = MutableStateFlow("https://firebasestorage.googleapis.com/v0/b/posplazita.appspot.com/o/logo.png?alt=media")
+    val appLogoUrl = _appLogoUrl.asStateFlow()
+
     // --- Datos de Sucursal Actual ---
     private val _branchName = MutableStateFlow("")
     val branchName = _branchName.asStateFlow()
@@ -153,6 +157,7 @@ class PeripheralViewModel(
                 settings["app_auto_branch_login"]?.let { _autoBranchLogin.value = it.toBoolean() }
                 settings["app_lock_branch_change"]?.let { _lockBranchChange.value = it.toBoolean() }
                 settings["${branchId}_max_cash_limit"]?.let { _maxCashLimit.value = it.toDoubleOrNull() ?: 5000.0 }
+                settings["app_logo_url"]?.let { _appLogoUrl.value = it }
                 
                 settings["${branchId}_webshop_enabled"]?.let { _isWebshopEnabled.value = it.toBoolean() }
                 settings["${branchId}_last_webshop_sync"]?.let { _lastWebshopSync.value = it.toLongOrNull() }
@@ -274,6 +279,11 @@ class PeripheralViewModel(
     fun updateMaxCashLimit(limit: Double) {
         _maxCashLimit.value = limit
         saveSetting("${branchId}_max_cash_limit", limit.toString())
+    }
+
+    fun updateAppLogoUrl(url: String) {
+        _appLogoUrl.value = url
+        saveSetting("app_logo_url", url)
     }
 
     fun updateBranchInfo(name: String, address: String, phone: String) {

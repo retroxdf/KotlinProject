@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -191,22 +192,6 @@ fun PosMainScreen(
                 }
             }
         },
-        snackbarHost = {
-            errorMessage?.let { msg ->
-                Snackbar(
-                    modifier = Modifier.padding(16.dp),
-                    action = { TextButton(onClick = { viewModel.clearError() }) { Text("OK", color = Color.White) } },
-                    containerColor = MaterialTheme.colorScheme.error
-                ) { Text(msg) }
-            }
-            warningMessage?.let { msg ->
-                Snackbar(
-                    modifier = Modifier.padding(16.dp),
-                    action = { TextButton(onClick = { viewModel.clearWarning() }) { Text("OK", color = Color.White) } },
-                    containerColor = Color(0xFF4CAF50)
-                ) { Text(msg) }
-            }
-        }
     ) { padding ->
         BoxWithConstraints(modifier = Modifier.padding(padding).fillMaxSize()) {
             val isCompact = maxWidth < 700.dp
@@ -422,29 +407,58 @@ fun PosMainScreen(
             val showCardSuccess by viewModel.showCardSuccess.collectAsState()
             
             if (showSaleSuccess && (saleChangeOverlay != null || showCardSuccess)) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Card(
-                        modifier = Modifier.width(450.dp), 
-                        elevation = CardDefaults.cardElevation(defaultElevation = 24.dp),
+                        modifier = Modifier.size(300.dp), 
+                        elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
                         border = BorderStroke(4.dp, Color(0xFF4CAF50)),
-                        shape = MaterialTheme.shapes.extraLarge
+                        shape = RoundedCornerShape(24.dp)
                     ) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(80.dp))
-                            Spacer(Modifier.height(24.dp))
-                            Text("VENTA COMPLETADA", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = Color.DarkGray, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(64.dp))
                             Spacer(Modifier.height(16.dp))
+                            Text("VENTA LISTA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.DarkGray)
                             if (showCardSuccess) {
-                                Text("PAGO EXITOSO", style = MaterialTheme.typography.displayMedium, color = Color(0xFF4CAF50), fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp))
+                                Text("PAGO OK", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF4CAF50), fontWeight = FontWeight.Black)
                             } else {
-                                Text("SU CAMBIO ES:", style = MaterialTheme.typography.titleLarge, color = Color.Gray, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                                Text("$${saleChangeOverlay?.formatPrice()}", style = MaterialTheme.typography.displayLarge.copy(fontSize = 72.sp, color = Color(0xFF4CAF50)), fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                                Text("CAMBIO:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                Text("$${saleChangeOverlay?.formatPrice()}", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black, color = Color(0xFF4CAF50))
                             }
-                            Spacer(Modifier.height(32.dp))
-                            Surface(color = Color.Gray.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp)) {
-                                Text("ESCANEANDO OTRO PRODUCTO SE QUITA ESTE AVISO", style = MaterialTheme.typography.labelSmall, color = Color.Gray, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                            }
+                        }
+                    }
+                }
+            }
+
+            if (errorMessage != null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Card(
+                        modifier = Modifier.size(200.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error),
+                        shape = RoundedCornerShape(24.dp),
+                        elevation = CardDefaults.cardElevation(12.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Error, null, tint = Color.White, modifier = Modifier.size(50.dp))
+                            Spacer(Modifier.height(12.dp))
+                            Text(errorMessage!!, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+
+            if (warningMessage != null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Card(
+                        modifier = Modifier.size(200.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50)),
+                        shape = RoundedCornerShape(24.dp),
+                        elevation = CardDefaults.cardElevation(12.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Color.White, modifier = Modifier.size(50.dp))
+                            Spacer(Modifier.height(12.dp))
+                            Text(warningMessage!!, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -869,7 +883,7 @@ fun PosMainScreen(
 // Pantallas y Diálogos de soporte
 
 @Composable
-fun CustomerSelectionDialog(viewModel: PosViewModel, onDismiss: () -> Unit) {
+fun CustomerSelectionDialog(viewModel: PosViewModel, onDismiss: () -> Unit, onSelectOverride: (() -> Unit)? = null) {
     val customers by viewModel.filteredCustomers.collectAsState()
     val searchQuery by viewModel.customerSearchQuery.collectAsState()
     val selectedIndex by viewModel.selectedCustomerIndex.collectAsState()
@@ -910,7 +924,11 @@ fun CustomerSelectionDialog(viewModel: PosViewModel, onDismiss: () -> Unit) {
                             when (event.key) {
                                 Key.DirectionDown -> { viewModel.moveCustomerFocus(1); true }
                                 Key.DirectionUp -> { viewModel.moveCustomerFocus(-1); true }
-                                Key.Enter, Key.NumPadEnter -> { viewModel.selectFocusedCustomer(); onDismiss(); true }
+                                Key.Enter, Key.NumPadEnter -> { 
+                                    viewModel.selectFocusedCustomer()
+                                    if (onSelectOverride != null) onSelectOverride() else onDismiss()
+                                    true 
+                                }
                                 else -> false
                             }
                         } else false
@@ -933,7 +951,7 @@ fun CustomerSelectionDialog(viewModel: PosViewModel, onDismiss: () -> Unit) {
                             Surface(
                                 modifier = Modifier.fillMaxWidth().clickable { 
                                     viewModel.selectCustomer(customer)
-                                    onDismiss()
+                                    if (onSelectOverride != null) onSelectOverride() else onDismiss()
                                 },
                                 color = if (isSelected) Color(0xFF2196F3) else Color.Transparent,
                                 shape = MaterialTheme.shapes.medium
@@ -1035,7 +1053,106 @@ fun WithdrawalDialog(viewModel: PosViewModel) {
 
 @Composable
 fun DebtPaymentDialog(viewModel: PosViewModel, onDismiss: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Abono a Deuda") }, text = { Text("Monto a abonar...") }, confirmButton = { Button(onClick = onDismiss) { Text("ABONAR") } })
+    val selectedCustomer by viewModel.selectedCustomer.collectAsState()
+    
+    if (selectedCustomer == null) {
+        // Al seleccionar cliente NO llamamos a onDismiss, para que la ventana de abono se muestre inmediatamente
+        CustomerSelectionDialog(viewModel, onDismiss = { /* Si el usuario cancela la búsqueda, cerramos todo */ onDismiss() }, onSelectOverride = { /* No cerrar */ })
+    } else {
+        var amountText by remember { mutableStateOf("") }
+        val focusRequester = remember { FocusRequester() }
+
+        LaunchedEffect(Unit) {
+            delay(100)
+            focusRequester.requestFocus()
+        }
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { 
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Payments, null, tint = Color(0xFF4CAF50))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Registrar Abono", fontWeight = FontWeight.Black)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.width(400.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("CLIENTE", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            Text(selectedCustomer!!.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(12.dp))
+                            Text("DEUDA ACTUAL", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            Text("$${selectedCustomer!!.currentDebt.formatPrice()}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, color = Color(0xFFC62828))
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) amountText = it },
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                val amount = amountText.toDoubleOrNull() ?: 0.0
+                                if (amount > 0) {
+                                    viewModel.processDebtPayment(selectedCustomer!!, amount)
+                                }
+                                true
+                            } else false
+                        },
+                        label = { Text("Monto a Abonar") },
+                        placeholder = { Text("0.00") },
+                        prefix = { Text("$", fontWeight = FontWeight.Bold) },
+                        textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF4CAF50),
+                            focusedLabelColor = Color(0xFF4CAF50)
+                        )
+                    )
+                    
+                    Surface(
+                        color = Color.Gray.copy(alpha = 0.05f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Al confirmar, se registrará el abono y se imprimirá un comprobante con el saldo restante.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(8.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { 
+                        val amount = amountText.toDoubleOrNull() ?: 0.0
+                        if (amount > 0) {
+                            viewModel.processDebtPayment(selectedCustomer!!, amount)
+                        }
+                    },
+                    enabled = (amountText.toDoubleOrNull() ?: 0.0) > 0,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                ) {
+                    Text("ABONAR E IMPRIMIR", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.selectCustomer(null) }) { 
+                    Text("CAMBIAR CLIENTE", color = MaterialTheme.colorScheme.primary) 
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1481,6 +1598,22 @@ fun PromotionVisualCard(promo: Promotion, viewModel: PosViewModel) {
                 color = Color.Gray,
                 fontWeight = FontWeight.Bold
             )
+        }
+    }
+}
+
+@Composable
+fun StatPanelRow(label: String, value: String, icon: ImageVector, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Surface(modifier = Modifier.size(40.dp), shape = CircleShape, color = color.copy(alpha = 0.1f)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
     }
 }
