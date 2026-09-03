@@ -146,8 +146,10 @@ class CustomerViewModel(
                 )
                 repository.addPayment(payment)
 
-                // Si el pago es en EFECTIVO, registrar movimiento en caja
+                // Si el pago es en EFECTIVO, registrar movimiento en caja y abrir cajón
                 if (method == "Efectivo") {
+                    printerManager?.openDrawer()
+                    
                     if (_selectedTerminalId.value == null) {
                         _errorMessage.value = "⚠️ Pago registrado, pero NO se sumó a caja porque no hay una caja seleccionada."
                     } else {

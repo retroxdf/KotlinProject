@@ -1319,13 +1319,20 @@ class PosViewModel(
                 
                 if (shouldPrint) {
                     val finalCustomer = if (customerId != null) customerRepository?.getCustomerById(customerId) else null
+                    // Abrir cajón solo si es pago en efectivo
+                    val openDrawer = _paymentMethod.value == "Efectivo"
+                    
                     printerManager?.printTicket(
                         sale, 
                         sale.items, 
+                        openDrawer = openDrawer,
                         walletBalance = finalCustomer?.walletBalance,
                         config = _ticketConfig.value,
                         branchName = _branchName.value
                     )
+                } else if (_paymentMethod.value == "Efectivo") {
+                    // Si no imprime pero es efectivo, abrir cajón (caso F12)
+                    printerManager?.openDrawer()
                 }
 
                 if (_paymentMethod.value == "Efectivo") {
@@ -1750,6 +1757,7 @@ class PosViewModel(
             printerManager?.printTicket(
                 sale, 
                 items, 
+                openDrawer = sale.paymentMethod == "Efectivo",
                 walletBalance = customer?.walletBalance,
                 config = _ticketConfig.value,
                 branchName = _branchName.value
@@ -1819,6 +1827,10 @@ class PosViewModel(
                 userId = _currentUser.value?.username ?: "admin"
             )
             cashMovementRepository?.saveMovement(movement)
+            
+            // Abrir cajón para cualquier movimiento de efectivo (Entrada o Salida)
+            openCashDrawer()
+
             if (isManual) {
                 setWarningMessage("${if(type == CashMovementType.IN) "Entrada" else "Salida"} registrada.")
                 closeCashMovementDialog()

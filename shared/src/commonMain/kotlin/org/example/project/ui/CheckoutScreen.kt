@@ -68,9 +68,9 @@ fun CheckoutScreen(
                         true 
                     }
                     Key.F12 -> { 
+                        // F12 termina la venta sin imprimir (abre cajón solo si es Efectivo, manejado en ViewModel)
                         if (!isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || (saleChange ?: -1.0) >= 0)) {
                             viewModel.completeSale(shouldPrint = false, onDone = onCancel)
-                            viewModel.openCashDrawer()
                         }
                         true 
                     }
