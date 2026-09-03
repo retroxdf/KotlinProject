@@ -20,6 +20,7 @@ class AndroidPrinterManager : PrinterManager {
     private var paperSize: Int = 80
     private var autoCut: Boolean = true
     private var openDrawerOnPrint: Boolean = true
+    private var drawerCommand: String = "EPSON_PIN2"
     
     private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
@@ -29,7 +30,8 @@ class AndroidPrinterManager : PrinterManager {
         address: String, 
         paperSize: Int, 
         autoCut: Boolean, 
-        openDrawer: Boolean
+        openDrawer: Boolean,
+        drawerCommand: String
     ) {
         this.printerName = name
         this.connectionType = type
@@ -37,6 +39,16 @@ class AndroidPrinterManager : PrinterManager {
         this.paperSize = paperSize
         this.autoCut = autoCut
         this.openDrawerOnPrint = openDrawer
+        this.drawerCommand = drawerCommand
+    }
+
+    private fun getDrawerCommandBytes(): ByteArray {
+        return when (drawerCommand) {
+            "EPSON_PIN2" -> byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())
+            "EPSON_PIN5" -> byteArrayOf(0x1B, 0x70, 0x01, 0x19, 0xFA.toByte())
+            "STAR" -> byteArrayOf(0x07)
+            else -> byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())
+        }
     }
 
     override fun printTicket(
@@ -49,12 +61,13 @@ class AndroidPrinterManager : PrinterManager {
         branchName: String?
     ) {
         val action: (OutputStream) -> Unit = { outputStream ->
+            // Abrir Cajón
             if (openDrawer && openDrawerOnPrint) {
-                outputStream.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
+                outputStream.write(getDrawerCommandBytes())
             }
 
             val lineChars = if (paperSize == 58) 30 else 40
-            val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+            val sdf = SimpleDateFormat("dd/MM/yyyy hh:mm:ss a", Locale.getDefault())
             val dateStr = sdf.format(Date(sale.timestamp))
             
             val content = buildTicketContentCommon(sale, items, comment, walletBalance, config, lineChars, dateStr, branchName)
@@ -62,8 +75,9 @@ class AndroidPrinterManager : PrinterManager {
             outputStream.write(content.toByteArray(Charsets.ISO_8859_1))
             outputStream.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A))
 
+            // Corte de papel (GS V 66 0)
             if (autoCut) {
-                outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))
+                outputStream.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
             }
         }
 
@@ -121,7 +135,7 @@ class AndroidPrinterManager : PrinterManager {
             outputStream.write(sb.toString().toByteArray(Charsets.ISO_8859_1))
 
             if (autoCut) {
-                outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))
+                outputStream.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
             }
         }
 
@@ -196,7 +210,9 @@ class AndroidPrinterManager : PrinterManager {
     }
 
     override fun openDrawer() {
-        val action: (OutputStream) -> Unit = { it.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())) }
+        val action: (OutputStream) -> Unit = { 
+            it.write(getDrawerCommandBytes())
+        }
         if (connectionType == "BLUETOOTH") {
             printViaBluetooth(action)
         } else if (connectionType == "NETWORK") {
@@ -208,6 +224,10 @@ class AndroidPrinterManager : PrinterManager {
         val action: (OutputStream) -> Unit = {
             val test = "\n\n   PRUEBA DE IMPRESION\n   SISTEMA POS ANDROID\n   CONEXION: OK\n\n\n\n"
             it.write(test.toByteArray(Charsets.US_ASCII))
+            
+            if (autoCut) {
+                it.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
+            }
         }
         if (connectionType == "BLUETOOTH") {
             printViaBluetooth(action)

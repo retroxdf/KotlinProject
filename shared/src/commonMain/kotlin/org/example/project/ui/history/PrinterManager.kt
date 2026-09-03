@@ -6,6 +6,7 @@ import com.abtsplazita.posplazita.domain.Customer
 import com.abtsplazita.posplazita.domain.TicketConfig
 import com.abtsplazita.posplazita.domain.TicketElementType
 import com.abtsplazita.posplazita.domain.formatPrice
+import com.abtsplazita.posplazita.domain.formatWeight
 
 interface PrinterManager {
     /**
@@ -56,7 +57,8 @@ interface PrinterManager {
         address: String, 
         paperSize: Int = 80,
         autoCut: Boolean = true,
-        openDrawer: Boolean = true
+        openDrawer: Boolean = true,
+        drawerCommand: String = "EPSON_PIN2"
     )
 
     /**
@@ -119,45 +121,68 @@ fun buildTicketContentCommon(
                     sb.append(alignText(name, lineChars, element.alignment) + "\n")
                 }
             }
+            TicketElementType.BRANCH_ADDRESS -> {
+                config?.branchAddress?.let {
+                    sb.append(alignText(it, lineChars, element.alignment) + "\n")
+                }
+            }
+            TicketElementType.BRANCH_PHONE -> {
+                config?.branchPhone?.let {
+                    sb.append(alignText(it, lineChars, element.alignment) + "\n")
+                }
+            }
             TicketElementType.DIVIDER -> sb.append("$divider\n")
             TicketElementType.TICKET_ID -> {
                 val displayId = sale.id.split("-").lastOrNull() ?: sale.id
-                sb.append(alignText("Folio: #$displayId", lineChars, element.alignment) + "\n")
+                val parts = dateStr.split(" ")
+                val onlyTime = if (parts.size >= 3) "${parts[1]} ${parts[2]}" else if (parts.size >= 2) parts[1] else ""
+                val line = displayId.padEnd((lineChars - onlyTime.length).coerceAtLeast(0)) + onlyTime
+                sb.append(line + "\n")
             }
-            TicketElementType.DATE -> sb.append(alignText("Fecha: $dateStr", lineChars, element.alignment) + "\n")
+            TicketElementType.DATE -> {
+                val parts = dateStr.split(" ")
+                val onlyDate = parts[0]
+                val label = "Venta"
+                val line = label.padEnd((lineChars - onlyDate.length).coerceAtLeast(0)) + onlyDate
+                sb.append(line + "\n")
+            }
+            TicketElementType.CUSTOMER_INFO -> {
+                val name = if (sale.customerId != null) "Cliente: ${sale.customerId}" else "Cliente: Público en General"
+                sb.append(alignText(name, lineChars, element.alignment) + "\n")
+            }
             TicketElementType.ITEMS_TABLE -> {
                 items.forEach {
-                    val priceStr = "$${it.subtotal.formatPrice()}"
-                    val namePart = it.productName.take((lineChars - priceStr.length - 1).coerceAtLeast(0))
-                    sb.append(namePart.padEnd(lineChars - priceStr.length) + priceStr + "\n")
-                    sb.append("  ${it.quantity} x $${it.priceAtSale.formatPrice()}\n")
+                    // Linea 1: Cantidad x Nombre
+                    val line1 = "${it.quantity.formatWeight()} x ${it.productName}"
+                    sb.append(line1.take(lineChars) + "\n")
+                    
+                    // Linea 2: Precio unitario [espacios] Subtotal
+                    val unitPrice = "$${it.priceAtSale.formatPrice()}"
+                    val subtotal = "$${it.subtotal.formatPrice()}"
+                    val spaces = (lineChars - unitPrice.length - subtotal.length).coerceAtLeast(1)
+                    sb.append(unitPrice + " ".repeat(spaces) + subtotal + "\n")
                 }
             }
             TicketElementType.TOTAL -> {
-                val totalLabel = "TOTAL:"
+                val totalQty = items.sumOf { it.quantity }.toInt()
+                val totalLabel = "Total($totalQty) MXN:"
                 val totalVal = "$${sale.total.formatPrice()}"
                 sb.append(totalLabel.padEnd((lineChars - totalVal.length).coerceAtLeast(0)) + totalVal + "\n")
             }
             TicketElementType.PAYMENT_INFO -> {
-                if (sale.paymentMethod == "Efectivo" && sale.receivedAmount > 0) {
-                    val rLabel = "RECIBIDO:"
-                    val rVal = "$${sale.receivedAmount.formatPrice()}"
-                    sb.append(rLabel.padEnd((lineChars - rVal.length).coerceAtLeast(0)) + rVal + "\n")
-                    
-                    val cLabel = "CAMBIO:"
+                val methodLabel = "${sale.paymentMethod} MXN:"
+                val methodVal = if (sale.paymentMethod == "Efectivo") "$${(sale.receivedAmount).formatPrice()}" else "$${sale.total.formatPrice()}"
+                sb.append(methodLabel.padEnd((lineChars - methodVal.length).coerceAtLeast(0)) + methodVal + "\n")
+                
+                if (sale.paymentMethod == "Efectivo") {
+                    val cLabel = "Cambio MXN:"
                     val cVal = "$${sale.changeAmount.formatPrice()}"
                     sb.append(cLabel.padEnd((lineChars - cVal.length).coerceAtLeast(0)) + cVal + "\n")
                 }
-
-                if (sale.creditAmount > 0) {
-                    val pLabel = "PAGADO EFECT.:"
-                    val pVal = "$${sale.cashAmount.formatPrice()}"
-                    sb.append(pLabel.padEnd((lineChars - pVal.length).coerceAtLeast(0)) + pVal + "\n")
-                    
-                    val cLabel = "A CREDITO:"
-                    val cVal = "$${sale.creditAmount.formatPrice()}"
-                    sb.append(cLabel.padEnd((lineChars - cVal.length).coerceAtLeast(0)) + cVal + "\n")
-                }
+            }
+            TicketElementType.TERMINAL_INFO -> {
+                val term = sale.terminalId ?: "1"
+                sb.append(alignText("Caja $term", lineChars, element.alignment) + "\n")
             }
             TicketElementType.WALLET_BALANCE -> {
                 if (walletBalance != null) {
@@ -218,7 +243,8 @@ class MockPrinterManager : PrinterManager {
         address: String, 
         paperSize: Int, 
         autoCut: Boolean, 
-        openDrawer: Boolean
+        openDrawer: Boolean,
+        drawerCommand: String
     ) {
         this.printerName = name
         this.connectionType = type

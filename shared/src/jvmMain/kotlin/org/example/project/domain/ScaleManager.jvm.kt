@@ -1,6 +1,7 @@
 package com.abtsplazita.posplazita.domain
 
 import com.fazecast.jSerialComm.SerialPort
+import com.abtsplazita.posplazita.scale.RhinoScaleParser
 
 class JvmScaleManager : ScaleManager {
     private var serialPort: SerialPort? = null
@@ -47,10 +48,7 @@ class JvmScaleManager : ScaleManager {
                 val read = input.read(buffer)
                 if (read > 0) {
                     val response = String(buffer, 0, read).trim()
-                    // Limpiar respuesta para obtener solo el número
-                    // Rhino suele responder algo como "0.000kg" o similar
-                    val cleanWeight = response.replace("[^0-9.]".toRegex(), "")
-                    cleanWeight.toDoubleOrNull()
+                    RhinoScaleParser.parse(response)
                 } else null
             } else null
         } catch (e: Exception) {

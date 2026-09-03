@@ -615,8 +615,8 @@ data class Expense(
 
 @Serializable
 enum class TicketElementType {
-    LOGO, HEADER, BRANCH_INFO, DIVIDER, TICKET_ID, DATE, ITEMS_TABLE, TOTAL, 
-    PAYMENT_INFO, WALLET_BALANCE, COMMENT, THANKS_MESSAGE, SOCIAL_MEDIA, SPACE
+    LOGO, HEADER, BRANCH_INFO, BRANCH_ADDRESS, BRANCH_PHONE, DIVIDER, TICKET_ID, DATE, CUSTOMER_INFO, ITEMS_TABLE, TOTAL, 
+    PAYMENT_INFO, WALLET_BALANCE, COMMENT, THANKS_MESSAGE, SOCIAL_MEDIA, SPACE, TERMINAL_INFO
 }
 
 @Serializable
@@ -637,6 +637,8 @@ data class TicketConfig(
     val instagram: String? = null,
     val whatsapp: String? = null,
     val thanksMessage: String = "Gracias por su compra!",
+    val branchAddress: String? = null,
+    val branchPhone: String? = null,
     val showBranchInfo: Boolean = true,
     val ticketIdPrefix: String = "S",
     val layout: List<TicketElement> = defaultLayout
@@ -645,20 +647,24 @@ data class TicketConfig(
         val defaultLayout = listOf(
             TicketElement(TicketElementType.LOGO),
             TicketElement(TicketElementType.HEADER),
-            TicketElement(TicketElementType.BRANCH_INFO),
+            TicketElement(TicketElementType.BRANCH_INFO, alignment = TicketAlignment.CENTER),
+            TicketElement(TicketElementType.BRANCH_ADDRESS, alignment = TicketAlignment.CENTER),
+            TicketElement(TicketElementType.BRANCH_PHONE, alignment = TicketAlignment.CENTER),
             TicketElement(TicketElementType.DIVIDER),
-            TicketElement(TicketElementType.TICKET_ID),
             TicketElement(TicketElementType.DATE),
+            TicketElement(TicketElementType.TICKET_ID),
+            TicketElement(TicketElementType.CUSTOMER_INFO),
             TicketElement(TicketElementType.DIVIDER),
             TicketElement(TicketElementType.ITEMS_TABLE),
             TicketElement(TicketElementType.DIVIDER),
             TicketElement(TicketElementType.TOTAL),
             TicketElement(TicketElementType.PAYMENT_INFO),
             TicketElement(TicketElementType.WALLET_BALANCE),
-            TicketElement(TicketElementType.COMMENT),
             TicketElement(TicketElementType.DIVIDER),
-            TicketElement(TicketElementType.THANKS_MESSAGE),
-            TicketElement(TicketElementType.SOCIAL_MEDIA)
+            TicketElement(TicketElementType.TERMINAL_INFO, alignment = TicketAlignment.CENTER),
+            TicketElement(TicketElementType.COMMENT),
+            TicketElement(TicketElementType.THANKS_MESSAGE, alignment = TicketAlignment.CENTER),
+            TicketElement(TicketElementType.SOCIAL_MEDIA, alignment = TicketAlignment.CENTER)
         )
     }
 }

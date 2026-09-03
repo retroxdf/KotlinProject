@@ -17,6 +17,9 @@ class CurrentSaleManager(
     private val _total = MutableStateFlow(0.0)
     val total: StateFlow<Double> = _total.asStateFlow()
 
+    private val _itemCount = MutableStateFlow(0)
+    val itemCount: StateFlow<Int> = _itemCount.asStateFlow()
+
     private var groupItems = true
     private var allowNegativeStock = false
     private var defaultPriceLevel = 2
@@ -261,11 +264,13 @@ class CurrentSaleManager(
         
         _currentItems.value = itemsWithPromos
         _total.value = rawTotal.roundToNearestHalf()
+        _itemCount.value = itemsWithPromos.size
     }
 
     fun clear() {
         _currentItems.value = emptyList()
         _total.value = 0.0
+        _itemCount.value = 0
         _currentWebOrderId.value = null
         saveState()
     }

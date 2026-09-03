@@ -34,6 +34,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.abtsplazita.posplazita.domain.formatPrice
+import com.abtsplazita.posplazita.domain.formatWeight
 import com.abtsplazita.posplazita.domain.calculatePriceFromUtility
 import com.abtsplazita.posplazita.domain.calculateDefaultPrice1
 import com.abtsplazita.posplazita.domain.calculateDefaultPrice2
@@ -854,12 +855,12 @@ fun ProductReturnsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit)
                         }
                         Spacer(Modifier.height(8.dp))
                         Text("DEVUELTO:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                        Text("${ret.returnedItem.quantity}x ${ret.returnedItem.productName}", fontWeight = FontWeight.Bold)
+                        Text("${ret.returnedItem.quantity.formatWeight()}x ${ret.returnedItem.productName}", fontWeight = FontWeight.Bold)
                         
                         ret.takenItem?.let {
                             Spacer(Modifier.height(8.dp))
                             Text("CAMBIADO POR:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                            Text("${it.quantity}x ${it.productName}", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                            Text("${it.quantity.formatWeight()}x ${it.productName}", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                         }
                         
                         Spacer(Modifier.height(8.dp))

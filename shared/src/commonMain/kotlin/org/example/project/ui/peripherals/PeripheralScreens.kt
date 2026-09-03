@@ -645,6 +645,8 @@ fun OperativitySubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) {
 @Composable
 fun TicketSettingsSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit, onNavigate: (String) -> Unit) {
     var logoUrl by remember { mutableStateOf("") }
+    var branchAddress by remember { mutableStateOf("") }
+    var branchPhone by remember { mutableStateOf("") }
     var facebook by remember { mutableStateOf("") }
     var instagram by remember { mutableStateOf("") }
     var whatsapp by remember { mutableStateOf("") }
@@ -656,6 +658,8 @@ fun TicketSettingsSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit, on
 
     LaunchedEffect(settings) {
         logoUrl = settings["ticket_logo_path"] ?: ""
+        branchAddress = settings["ticket_branch_address"] ?: ""
+        branchPhone = settings["ticket_branch_phone"] ?: ""
         facebook = settings["ticket_facebook"] ?: ""
         instagram = settings["ticket_instagram"] ?: ""
         whatsapp = settings["ticket_whatsapp"] ?: ""
@@ -670,15 +674,26 @@ fun TicketSettingsSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit, on
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Información y Redes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Información de la Tienda", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 
                 OutlinedTextField(
-                    value = logoUrl,
-                    onValueChange = { logoUrl = it },
-                    label = { Text("URL del Logo (Link directo)") },
+                    value = branchAddress,
+                    onValueChange = { branchAddress = it },
+                    label = { Text("Dirección") },
                     modifier = Modifier.fillMaxWidth(),
-                    leadingIcon = { Icon(Icons.Default.Link, null) }
+                    leadingIcon = { Icon(Icons.Default.LocationOn, null) }
                 )
+
+                OutlinedTextField(
+                    value = branchPhone,
+                    onValueChange = { branchPhone = it },
+                    label = { Text("Teléfono") },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Phone, null) }
+                )
+
+                HorizontalDivider()
+                Text("Redes Sociales", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
@@ -752,7 +767,7 @@ fun TicketSettingsSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit, on
 
         Button(
             onClick = {
-                viewModel.updateTicketConfig(logoUrl, facebook, instagram, whatsapp, thanksMsg, showBranch, ticketPrefix)
+                viewModel.updateTicketConfig(logoUrl, facebook, instagram, whatsapp, thanksMsg, showBranch, ticketPrefix, branchAddress, branchPhone)
                 onBack()
             },
             modifier = Modifier.fillMaxWidth().height(56.dp)
@@ -1305,6 +1320,21 @@ fun PrinterSettingsSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) {
                     }
                     Switch(checked = openDrawerOnPrint, onCheckedChange = { viewModel.toggleOpenDrawerOnPrint(it) })
                 }
+
+                if (openDrawerOnPrint) {
+                    val drawerCommand by viewModel.drawerCommand.collectAsState()
+                    Text("Pin / Comando de Apertura", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 8.dp))
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("EPSON_PIN2" to "Epson Pin 2", "EPSON_PIN5" to "Epson Pin 5", "STAR" to "Star").forEach { (cmd, label) ->
+                            FilterChip(
+                                selected = drawerCommand == cmd,
+                                onClick = { viewModel.setDrawerCommand(cmd) },
+                                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -1400,7 +1430,7 @@ fun ScaleSettingsSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) {
             }
             if (lastScaleWeight != null) {
                 Card(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                    Text("Lectura actual: ${lastScaleWeight!!.formatPrice()} kg", modifier = Modifier.padding(16.dp).align(Alignment.CenterHorizontally), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                    Text("Lectura actual: ${lastScaleWeight!!.formatWeight()} kg", modifier = Modifier.padding(16.dp).align(Alignment.CenterHorizontally), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
                 }
             }
         }
@@ -2299,10 +2329,13 @@ fun TicketElementCard(
                         text = when(element.type) {
                             TicketElementType.LOGO -> "Logo de Empresa"
                             TicketElementType.HEADER -> "Encabezado Personalizado"
-                            TicketElementType.BRANCH_INFO -> "Datos de Sucursal"
+                            TicketElementType.BRANCH_INFO -> "Nombre de Tienda"
+                            TicketElementType.BRANCH_ADDRESS -> "Dirección de Tienda"
+                            TicketElementType.BRANCH_PHONE -> "Teléfono de Tienda"
                             TicketElementType.DIVIDER -> "Línea Divisoria"
-                            TicketElementType.TICKET_ID -> "Número de Ticket"
+                            TicketElementType.TICKET_ID -> "Folio de Venta"
                             TicketElementType.DATE -> "Fecha y Hora"
+                            TicketElementType.CUSTOMER_INFO -> "Información del Cliente"
                             TicketElementType.ITEMS_TABLE -> "Lista de Productos"
                             TicketElementType.TOTAL -> "Monto Total"
                             TicketElementType.PAYMENT_INFO -> "Métodos de Pago"
@@ -2311,6 +2344,7 @@ fun TicketElementCard(
                             TicketElementType.THANKS_MESSAGE -> "Mensaje de Despedida"
                             TicketElementType.SOCIAL_MEDIA -> "Redes Sociales"
                             TicketElementType.SPACE -> "Espacio en Blanco"
+                            TicketElementType.TERMINAL_INFO -> "Número de Caja"
                         },
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodyMedium,
@@ -2415,40 +2449,69 @@ fun PreviewElement(element: TicketElement, paperSize: Int, branchName: String) {
             )
         }
         TicketElementType.BRANCH_INFO -> {
-            Text("Sucursal: ${branchName.ifBlank { "001" }}", style = MaterialTheme.typography.bodySmall, fontFamily = mono, textAlign = textAlign, modifier = contentModifier)
+            Text(branchName.ifBlank { "Abarrotes Joshua" }, style = MaterialTheme.typography.bodySmall, fontFamily = mono, textAlign = textAlign, modifier = contentModifier)
+        }
+        TicketElementType.BRANCH_ADDRESS -> {
+            Text("Bugambilia, 44, la cantera, tepic, nayarit, C.P. 63506", style = MaterialTheme.typography.bodySmall, fontFamily = mono, textAlign = textAlign, modifier = contentModifier)
+        }
+        TicketElementType.BRANCH_PHONE -> {
+            Text("3116107766", style = MaterialTheme.typography.bodySmall, fontFamily = mono, textAlign = textAlign, modifier = contentModifier)
         }
         TicketElementType.DIVIDER -> {
             Text("-".repeat(lineChars), fontFamily = mono, color = Color.Gray, maxLines = 1)
         }
         TicketElementType.TICKET_ID -> {
-            Text("Ticket: #12345", style = MaterialTheme.typography.bodySmall, fontFamily = mono, modifier = contentModifier, textAlign = textAlign)
+            Text("70450", style = MaterialTheme.typography.bodySmall, fontFamily = mono, modifier = contentModifier, textAlign = textAlign)
         }
         TicketElementType.DATE -> {
-            Text("Fecha: 28/08/2026 18:30", style = MaterialTheme.typography.bodySmall, fontFamily = mono, modifier = contentModifier, textAlign = textAlign)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Venta", fontFamily = mono, style = MaterialTheme.typography.bodySmall)
+                Text("03/09/2026", fontFamily = mono, style = MaterialTheme.typography.bodySmall)
+            }
+            Text("06:51:42 AM", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End, fontFamily = mono, style = MaterialTheme.typography.bodySmall)
+        }
+        TicketElementType.CUSTOMER_INFO -> {
+            Text("Cliente: Público en General", style = MaterialTheme.typography.bodySmall, fontFamily = mono, modifier = contentModifier, textAlign = textAlign)
         }
         TicketElementType.ITEMS_TABLE -> {
             Column(modifier = Modifier.fillMaxWidth()) {
-                repeat(2) {
-                    val price = "$100.00"
-                    val name = "Producto Ejemplo $it".take(lineChars - price.length - 1)
+                repeat(1) {
+                    val qty = "1.0"
+                    val name = "Rastrillo Eco"
+                    val price = "$5.00"
+                    val subtotal = "$5.00"
+                    
+                    Text("$qty x $name", fontFamily = mono, style = MaterialTheme.typography.bodySmall)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(name, modifier = Modifier.weight(1f), fontFamily = mono, style = MaterialTheme.typography.bodySmall)
                         Text(price, fontFamily = mono, style = MaterialTheme.typography.bodySmall)
+                        Text(subtotal, fontFamily = mono, style = MaterialTheme.typography.bodySmall)
                     }
-                    Text("  1.0 x $100.00", style = MaterialTheme.typography.labelSmall, color = Color.Gray, fontFamily = mono)
                 }
             }
         }
         TicketElementType.TOTAL -> {
-            val label = "TOTAL:"
-            val value = "$200.00"
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(label, fontWeight = FontWeight.Bold, fontFamily = mono, style = MaterialTheme.typography.bodyMedium)
-                Text(value, fontWeight = FontWeight.Black, fontFamily = mono, style = MaterialTheme.typography.bodyMedium)
+            val label = "Total(1) MXN:"
+            val value = "$5.00"
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Text(label, fontFamily = mono, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.width(8.dp))
+                Text(value, fontWeight = FontWeight.Bold, fontFamily = mono, style = MaterialTheme.typography.bodySmall)
             }
         }
         TicketElementType.PAYMENT_INFO -> {
-            Text("PAGADO EFECT.:".padEnd(lineChars - 7) + "$200.00", style = MaterialTheme.typography.labelMedium, fontFamily = mono, textAlign = textAlign, modifier = contentModifier)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Text("Efectivo MXN:", fontFamily = mono, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.width(8.dp))
+                Text("$5.00", fontFamily = mono, style = MaterialTheme.typography.bodySmall)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Text("Cambio MXN:", fontFamily = mono, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.width(8.dp))
+                Text("$0.00", fontFamily = mono, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        TicketElementType.TERMINAL_INFO -> {
+            Text("Caja 1", style = MaterialTheme.typography.bodySmall, fontFamily = mono, textAlign = textAlign, modifier = contentModifier)
         }
         TicketElementType.WALLET_BALANCE -> {
             Text("SALDO MONEDERO:".padEnd(lineChars - 6) + "$50.00", style = MaterialTheme.typography.labelMedium, color = Color.Blue, fontFamily = mono, textAlign = textAlign, modifier = contentModifier)

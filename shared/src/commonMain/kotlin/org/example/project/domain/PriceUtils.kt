@@ -36,6 +36,26 @@ fun Double.formatPrice(): String {
 }
 
 /**
+ * Formatea un peso o cantidad sin redondear a 0.50.
+ * Muestra hasta 3 decimales si es necesario.
+ */
+fun Double.formatWeight(): String {
+    val stringVal = this.toString()
+    return if (stringVal.contains(".")) {
+        val parts = stringVal.split(".")
+        val integerPart = parts[0]
+        val decimalPart = parts[1]
+        if (decimalPart.length > 3) {
+            "$integerPart.${decimalPart.take(3)}"
+        } else {
+            stringVal
+        }
+    } else {
+        stringVal
+    }
+}
+
+/**
  * Calcula la utilidad (markup) basado en el costo y precio.
  * Retorna el porcentaje sobre el costo (Markup).
  * Ejemplo: Costo 10, Precio 13 -> 30%

@@ -36,6 +36,7 @@ fun CheckoutScreen(
     onCancel: () -> Unit
 ) {
     val total by viewModel.total.collectAsState()
+    val itemCount by viewModel.itemCount.collectAsState()
     val items by viewModel.currentItems.collectAsState()
     val amountPaidText by viewModel.amountPaidText.collectAsState()
     val paymentMethod by viewModel.paymentMethod.collectAsState()
@@ -114,7 +115,7 @@ fun CheckoutScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("TOTAL A PAGAR", style = MaterialTheme.typography.labelSmall)
-                            Text("$${total.formatPrice()}", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black)
+                            Text("$${total.formatPrice()} (${itemCount}pz)", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black)
                         }
                     }
 
@@ -234,7 +235,7 @@ fun CheckoutScreen(
                         ) {
                             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("TOTAL NETO", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                Text("$${total.formatPrice()}", style = MaterialTheme.typography.displayLarge.copy(fontSize = 70.sp), fontWeight = FontWeight.Black)
+                                Text("$${total.formatPrice()} (${itemCount}pz)", style = MaterialTheme.typography.displayLarge.copy(fontSize = 70.sp), fontWeight = FontWeight.Black)
                             }
                         }
 

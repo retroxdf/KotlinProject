@@ -176,6 +176,8 @@ class PeripheralViewModel(
                 settings["printer_paper_size"]?.let { _paperSize.value = it.toIntOrNull() ?: 80 }
                 settings["printer_auto_cut"]?.let { _autoCut.value = it.toBoolean() }
                 settings["printer_open_drawer"]?.let { _openDrawerOnPrint.value = it.toBoolean() }
+                settings["printer_drawer_command"]?.let { _drawerCommand.value = it }
+                settings["printer_drawer_command"]?.let { _drawerCommand.value = it }
 
                 // Cargar estado de conexión de la impresora
                 settings["printer_active"]?.let { active ->
@@ -443,6 +445,9 @@ class PeripheralViewModel(
     private val _openDrawerOnPrint = MutableStateFlow(true)
     val openDrawerOnPrint = _openDrawerOnPrint.asStateFlow()
 
+    private val _drawerCommand = MutableStateFlow("EPSON_PIN2")
+    val drawerCommand = _drawerCommand.asStateFlow()
+
     private val _availableSystemPrinters = MutableStateFlow<List<String>>(emptyList())
     val availableSystemPrinters = _availableSystemPrinters.asStateFlow()
 
@@ -640,17 +645,24 @@ class PeripheralViewModel(
         saveSetting("printer_open_drawer", enabled.toString())
     }
 
+    fun setDrawerCommand(command: String) {
+        _drawerCommand.value = command
+        syncConfigIfConnected()
+        saveSetting("printer_drawer_command", command)
+    }
+
     private fun syncConfigIfConnected() {
         if (_isPrinterConnected.value) {
             val addr = if (_connectionType.value == PrinterConnectionType.NETWORK) _printerAddress.value else _bluetoothMac.value
             printerManager?.setConfig(
-                name = _printerName.value,
-                type = _connectionType.value.name,
-                address = addr,
-                paperSize = _paperSize.value,
-                autoCut = _autoCut.value,
-                openDrawer = _openDrawerOnPrint.value
-            )
+            name = _printerName.value,
+            type = _connectionType.value.name,
+            address = addr,
+            paperSize = _paperSize.value,
+            autoCut = _autoCut.value,
+            openDrawer = _openDrawerOnPrint.value,
+            drawerCommand = _drawerCommand.value
+        )
         }
     }
 
@@ -747,7 +759,7 @@ class PeripheralViewModel(
         _adImages.value = listOf(url)
     }
 
-    fun updateTicketConfig(logo: String, fb: String, ig: String, wa: String, thanks: String, showBranch: Boolean, prefix: String = "S") {
+    fun updateTicketConfig(logo: String, fb: String, ig: String, wa: String, thanks: String, showBranch: Boolean, prefix: String = "S", address: String = "", phone: String = "") {
         saveSetting("ticket_logo_path", logo)
         saveSetting("ticket_facebook", fb)
         saveSetting("ticket_instagram", ig)
@@ -755,6 +767,8 @@ class PeripheralViewModel(
         saveSetting("ticket_thanks_message", thanks)
         saveSetting("ticket_show_branch", showBranch.toString())
         saveSetting("ticket_id_prefix", prefix)
+        saveSetting("ticket_branch_address", address)
+        saveSetting("ticket_branch_phone", phone)
     }
 
     fun updateTicketLayout(newLayout: List<TicketElement>) {

@@ -55,6 +55,7 @@ fun PosMainScreen(
 ) {
     val items by viewModel.currentItems.collectAsState()
     val total by viewModel.total.collectAsState()
+    val itemCount by viewModel.itemCount.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val searchStocks by viewModel.searchStocks.collectAsState()
@@ -307,7 +308,7 @@ fun PosMainScreen(
                                         Column(Modifier.weight(1f)) {
                                             Text(item.productName, style = MaterialTheme.typography.bodyLarge, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, color = if (isSelected) Color.White else Color.Unspecified)
                                             Surface(color = Color.Transparent, onClick = { viewModel.openQuantityDialog(item) }) {
-                                                Text("${item.quantity} x $${item.priceAtSale.formatPrice()}", style = MaterialTheme.typography.bodySmall, color = if (isSelected) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                                Text("${item.quantity.formatWeight()} x $${item.priceAtSale.formatPrice()}", style = MaterialTheme.typography.bodySmall, color = if (isSelected) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                             }
                                         }
                                         Text("$${item.subtotal.formatPrice()}", fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color.Unspecified)
@@ -335,7 +336,7 @@ fun PosMainScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Surface(modifier = Modifier.width(45.dp), color = Color.Transparent, onClick = { viewModel.setSelectedCartIndex(index); viewModel.openQuantityDialog(item) }) {
-                                            Text("${item.quantity}", textAlign = TextAlign.Center, color = if (isSelected) Color.White else MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, style = MaterialTheme.typography.bodyLarge)
+                                            Text(item.quantity.formatWeight(), textAlign = TextAlign.Center, color = if (isSelected) Color.White else MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, style = MaterialTheme.typography.bodyLarge)
                                         }
                                         
                                         Card(
@@ -377,7 +378,7 @@ fun PosMainScreen(
                                 Row(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(horizontalAlignment = Alignment.Start) {
                                         Text("TOTAL A COBRAR", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f))
-                                        Text("$${total.formatPrice()}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Color.White)
+                                        Text("$${total.formatPrice()} (${itemCount}pz)", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Color.White)
                                     }
                                     Spacer(Modifier.weight(1f))
                                     Icon(Icons.Default.FlashOn, null, modifier = Modifier.size(32.dp))

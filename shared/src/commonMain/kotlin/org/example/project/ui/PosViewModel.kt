@@ -56,6 +56,7 @@ class PosViewModel(
 
     val currentItems = currentSaleManager.currentItems
     val total = currentSaleManager.total
+    val itemCount = currentSaleManager.itemCount
 
     // --- Permisos del Usuario Actual ---
     private val _userPermissions = MutableStateFlow<Map<Permission, PermissionLevel>>(emptyMap())
@@ -168,6 +169,8 @@ class PosViewModel(
                     instagram = settings["ticket_instagram"],
                     whatsapp = settings["ticket_whatsapp"],
                     thanksMessage = settings["ticket_thanks_message"] ?: "Gracias por su compra!",
+                    branchAddress = settings["ticket_branch_address"],
+                    branchPhone = settings["ticket_branch_phone"],
                     showBranchInfo = settings["ticket_show_branch"]?.toBoolean() ?: true,
                     ticketIdPrefix = settings["ticket_id_prefix"] ?: "S",
                     layout = customLayout ?: TicketConfig.defaultLayout
@@ -640,10 +643,13 @@ class PosViewModel(
         val price = _commonProductPrice.value.text.toDoubleOrNull() ?: 0.0
         if (price > 0) {
             val dummyProduct = Product(
-                id = "COMMON",
+                id = "COMMON_${currentTimeMillis()}",
                 name = name,
                 barcode = "0",
+                price1 = price,
+                price2 = price,
                 price3 = price,
+                price4 = price,
                 isService = true
             )
             addProduct(dummyProduct, 9999.0)
@@ -1447,11 +1453,28 @@ class PosViewModel(
             successJob?.cancel()
         }
         
-        // Soporte para atajo instantáneo en Android (ej: 15+)
+        // Soporte para atajo instantáneo (ej: 15+)
         if (text.endsWith("+") && text.length > 1) {
-            val pricePart = text.removeSuffix("+")
-            if (pricePart.all { it.isDigit() || it == '.' }) {
-                openCommonWithShortcut(pricePart)
+            val part = text.removeSuffix("+")
+            if (part.all { it.isDigit() || it == '.' }) {
+                val value = part.toDoubleOrNull() ?: 0.0
+                val items = currentItems.value
+                
+                // Si hay items en el carrito, el + actúa como actualizador de cantidad
+                if (items.isNotEmpty()) {
+                    var index = _selectedCartIndex.value
+                    if (index !in items.indices) index = items.size - 1
+                    val item = items[index]
+                    
+                    if (item.isBulk || (value % 1.0 == 0.0)) {
+                        currentSaleManager.updateItemQuantity(item, value)
+                        _searchQuery.value = TextFieldValue("")
+                        return
+                    }
+                }
+                
+                // Si no hay items o es para un producto nuevo, abrir diálogo de producto común
+                openCommonWithShortcut(part)
                 _searchQuery.value = TextFieldValue("")
                 return
             }
@@ -1473,35 +1496,6 @@ class PosViewModel(
         _saleChange.value = null
         _showCardSuccess.value = false
         successJob?.cancel()
-
-        // --- Soporte para cantidad+ (Ej: 15+) ---
-        if (rawQuery.endsWith("+")) {
-            val qtyPart = rawQuery.removeSuffix("+").trim()
-            val value = qtyPart.toDoubleOrNull()
-            if (value != null && value > 0) {
-                val items = currentItems.value
-                // Si hay un item seleccionado, actualizar su cantidad
-                if (items.isNotEmpty()) {
-                    var index = _selectedCartIndex.value
-                    if (index !in items.indices) index = items.size - 1
-                    
-                    val item = items[index]
-                    if (!item.isBulk && (value % 1.0 != 0.0)) {
-                        setErrorMessage("El producto '${item.productName}' no permite venta fraccionada (Granel).")
-                        playErrorSound()
-                    } else {
-                        currentSaleManager.updateItemQuantity(item, value)
-                        onSearchQueryClear()
-                        return
-                    }
-                }
-                
-                // Si no hay items o falló lo anterior, abrir como Producto Común con ese precio
-                openCommonWithShortcut(qtyPart)
-                onSearchQueryClear()
-            }
-            return
-        }
 
         var multiplier: Double? = null
         var query = rawQuery
@@ -1545,6 +1539,14 @@ class PosViewModel(
                         return@launch
                     }
                     addProduct(exactMatch, repository.getStock(exactMatch.id, branchId), mult)
+                } else if (exactMatch.useScale) {
+                    val weight = scaleManager.readWeight()
+                    if (weight != null && weight > 0) {
+                        addProduct(exactMatch, repository.getStock(exactMatch.id, branchId), weight)
+                    } else {
+                        // Si falla la báscula o no hay lectura, abrir diálogo manual
+                        openBulkQuantityDialog(exactMatch, repository.getStock(exactMatch.id, branchId))
+                    }
                 } else if (exactMatch.isBulk) {
                     openBulkQuantityDialog(exactMatch, repository.getStock(exactMatch.id, branchId))
                 } else {
@@ -1635,6 +1637,13 @@ class PosViewModel(
                 return
             }
             addProduct(product, stock, mult)
+        } else if (product.useScale) {
+            val weight = scaleManager.readWeight()
+            if (weight != null && weight > 0) {
+                addProduct(product, stock, weight)
+            } else {
+                openBulkQuantityDialog(product, stock)
+            }
         } else if (product.isBulk) {
             openBulkQuantityDialog(product, stock)
         } else {

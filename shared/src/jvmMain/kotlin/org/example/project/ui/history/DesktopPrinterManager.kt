@@ -19,6 +19,7 @@ class DesktopPrinterManager : PrinterManager {
     private var paperSize: Int = 80
     private var autoCut: Boolean = true
     private var openDrawerOnPrint: Boolean = true
+    private var drawerCommand: String = "EPSON_PIN2"
 
     override fun setConfig(
         name: String, 
@@ -26,7 +27,8 @@ class DesktopPrinterManager : PrinterManager {
         address: String, 
         paperSize: Int, 
         autoCut: Boolean, 
-        openDrawer: Boolean
+        openDrawer: Boolean,
+        drawerCommand: String
     ) {
         this.printerName = name
         this.connectionType = type
@@ -34,6 +36,16 @@ class DesktopPrinterManager : PrinterManager {
         this.paperSize = paperSize
         this.autoCut = autoCut
         this.openDrawerOnPrint = openDrawer
+        this.drawerCommand = drawerCommand
+    }
+
+    private fun getDrawerCommandBytes(): ByteArray {
+        return when (drawerCommand) {
+            "EPSON_PIN2" -> byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())
+            "EPSON_PIN5" -> byteArrayOf(0x1B, 0x70, 0x01, 0x19, 0xFA.toByte())
+            "STAR" -> byteArrayOf(0x07)
+            else -> byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())
+        }
     }
 
     override fun printTicket(
@@ -49,11 +61,11 @@ class DesktopPrinterManager : PrinterManager {
             sendEscPos { outputStream ->
                 // Abrir Cajón
                 if (openDrawer && openDrawerOnPrint) {
-                    outputStream.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
+                    outputStream.write(getDrawerCommandBytes())
                 }
 
                 val lineChars = if (paperSize == 58) 30 else 40
-                val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+                val sdf = SimpleDateFormat("dd/MM/yyyy hh:mm:ss a", Locale.getDefault())
                 val dateStr = sdf.format(Date(sale.timestamp))
                 
                 val content = buildTicketContentCommon(sale, items, comment, walletBalance, config, lineChars, dateStr, branchName)
@@ -62,9 +74,9 @@ class DesktopPrinterManager : PrinterManager {
                 outputStream.write(content.toByteArray(Charsets.ISO_8859_1))
                 outputStream.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A)) // Espacio final
 
-                // Corte de papel si está habilitado
+                // Corte de papel (Comando robusto GS V 66 0)
                 if (autoCut) {
-                    outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))
+                    outputStream.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
                 }
             }
         } else if (connectionType == "SYSTEM") {
@@ -160,7 +172,7 @@ class DesktopPrinterManager : PrinterManager {
                 outputStream.write(sb.toString().toByteArray(Charsets.ISO_8859_1))
 
                 if (autoCut) {
-                    outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))
+                    outputStream.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
                 }
             }
         } else {
@@ -243,7 +255,9 @@ class DesktopPrinterManager : PrinterManager {
 
     override fun openDrawer() {
         if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
-            sendEscPos { it.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())) }
+            sendEscPos { 
+                it.write(getDrawerCommandBytes())
+            }
         } else {
             println("Desktop: Abriendo cajón en $printerName")
         }
@@ -254,6 +268,10 @@ class DesktopPrinterManager : PrinterManager {
             sendEscPos {
                 val test = "\n\n   PRUEBA DE IMPRESION\n   SISTEMA POS DESKTOP\n   CONEXION: OK\n\n\n\n"
                 it.write(test.toByteArray(Charsets.US_ASCII))
+                
+                if (autoCut) {
+                    it.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
+                }
             }
         } else {
             println("Desktop: Prueba a $printerName")
