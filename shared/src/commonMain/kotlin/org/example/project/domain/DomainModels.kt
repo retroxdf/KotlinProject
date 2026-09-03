@@ -233,7 +233,11 @@ data class SaleItem(
     val category: String = "General",
     val isService: Boolean = false,
     val isBulk: Boolean = false,
-    val isWebDiscounted: Boolean = false
+    val isWebDiscounted: Boolean = false,
+    val price1: Double? = null, // Precio de mayoreo (NUEVO)
+    val price2: Double? = null, // Precio público (DEFAULT)
+    val price3: Double? = null, // Precio adicional (P2 + 0.50)
+    val isPromoApplied: Boolean = false // Si se aplicó una promoción (no genera monedero)
 )
 
 // --- Control de Caja ---

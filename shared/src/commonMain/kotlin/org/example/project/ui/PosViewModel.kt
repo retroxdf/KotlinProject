@@ -174,6 +174,10 @@ class PosViewModel(
                 )
                 
                 _branchName.value = settings["${branchId}_name"] ?: ""
+
+                // Configuración de Mayoreo Automático
+                val wholesaleEnabled = settings["${branchId}_wholesale_enabled"]?.toBoolean() ?: false
+                currentSaleManager.setWholesaleEnabled(wholesaleEnabled)
             }
         }
         startWebOrdersObservation()
@@ -223,7 +227,7 @@ class PosViewModel(
     private val _isGroupingEnabled = MutableStateFlow(true)
     val isGroupingEnabled = _isGroupingEnabled.asStateFlow()
 
-    private val _selectedPriceLevel = MutableStateFlow(3)
+    private val _selectedPriceLevel = MutableStateFlow(2)
     val selectedPriceLevel = _selectedPriceLevel.asStateFlow()
 
     // --- Buscador ---
@@ -238,8 +242,15 @@ class PosViewModel(
     private val _searchResults = MutableStateFlow<List<Product>>(emptyList())
     val searchResults = _searchResults.asStateFlow()
 
-    private val _searchStocks = MutableStateFlow<Map<String, Double>>(emptyMap())
-    val searchStocks = _searchStocks.asStateFlow()
+    val searchStocks: StateFlow<Map<String, Double>> = combine(
+        _searchResults,
+        repository.getAllInventory()
+    ) { results, inventory ->
+        results.associate { p -> 
+            val stock = inventory.find { it.productId == p.id && it.branchId == branchId }?.stock ?: 0.0
+            p.id to stock
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     private val _selectedSearchIndex = MutableStateFlow(0)
     val selectedSearchIndex = _selectedSearchIndex.asStateFlow()
@@ -308,10 +319,12 @@ class PosViewModel(
                 val updatedOrder = order.copy(status = newStatus)
                 firebaseManager?.syncWebOrder(updatedOrder)
 
-                // Si el pedido se cancela o rechaza, devolver el stock a la nube
+                // Si el pedido se cancela o rechaza, devolver el stock a la nube SOLO si fue descontado previamente
                 if (newStatus == WebOrderStatus.CANCELLED) {
                     order.items.forEach { item ->
-                        repository.increaseStock(item.productId, branchId, item.quantity, _currentUser.value?.username ?: "admin", "Cancelación Pedido Web ${order.id}")
+                        if (item.isWebDiscounted) {
+                            repository.increaseStock(item.productId, branchId, item.quantity, _currentUser.value?.username ?: "admin", "Cancelación Pedido Web ${order.id}")
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -333,7 +346,7 @@ class PosViewModel(
                         branchId, 
                         repository.getStock(product.id, branchId), 
                         item.quantity,
-                        isWebDiscounted = true // Marcar como ya descontado por la web
+                        isWebDiscounted = item.isWebDiscounted // Usar el valor que viene del pedido web
                     )
                 }
             }
@@ -1236,7 +1249,7 @@ class PosViewModel(
                 _showSaleSuccessOverlay.value = true
                 successJob?.cancel()
                 successJob = viewModelScope.launch {
-                    delay(2000)
+                    delay(120000) // Esperar 2 minutos
                     _showSaleSuccessOverlay.value = false
                     _saleChange.value = null
                     _showCardSuccess.value = false
@@ -1252,9 +1265,12 @@ class PosViewModel(
                     val settings = settingsRepository?.getAllSettings()?.first() ?: emptyMap()
                     var walletBonus = 0.0
                     sale.items.forEach { item ->
-                        val percent = settings["wallet_percent_${item.category}"]?.toDoubleOrNull() ?: 0.0
-                        if (percent > 0) {
-                            walletBonus += item.subtotal * (percent / 100.0)
+                        // Si se aplicó una promoción o descuento web, no genera monedero
+                        if (!item.isPromoApplied && !item.isWebDiscounted) {
+                            val percent = settings["wallet_percent_${item.category}"]?.toDoubleOrNull() ?: 0.0
+                            if (percent > 0) {
+                                walletBonus += item.subtotal * (percent / 100.0)
+                            }
                         }
                     }
                     if (walletBonus > 0) {
@@ -1267,9 +1283,9 @@ class PosViewModel(
                     customerRepository?.updateDebt(customerId, currentTotal)
                 }
 
-                // Solo descontar stock de los items que NO fueron descontados previamente por la web
+                // Descontar stock de todos los productos (incluyendo pedidos web para mantener sincronía local)
                 sale.items.forEach { item ->
-                    if (!item.isService && !item.isWebDiscounted) {
+                    if (!item.isService) {
                         repository.decreaseStock(item.productId, branchId, item.quantity, _currentUser.value?.username ?: "admin", "Venta $saleId")
                     }
                 }
@@ -1287,6 +1303,14 @@ class PosViewModel(
                             difference = ret.subtotal // Esto es el saldo que aportó a favor
                         )
                         productReturnRepository?.saveReturn(productReturn)
+                    }
+                }
+
+                // 5. Si viene de un pedido web, marcarlo como entregado
+                currentSaleManager.currentWebOrderId.value?.let { webId ->
+                    val order = _webOrders.value.find { it.id == webId }
+                    if (order != null) {
+                        updateWebOrderStatus(order, WebOrderStatus.DELIVERED)
                     }
                 }
 
@@ -1408,6 +1432,14 @@ class PosViewModel(
     // --- Buscador y Carrito ---
     fun onSearchQueryChange(query: TextFieldValue) { 
         val text = query.text
+        
+        // Quitar ventana de cambio al empezar a escribir algo nuevo
+        if (text.isNotEmpty() && _showSaleSuccessOverlay.value) {
+            _showSaleSuccessOverlay.value = false
+            _saleChange.value = null
+            successJob?.cancel()
+        }
+        
         // Soporte para atajo instantáneo en Android (ej: 15+)
         if (text.endsWith("+") && text.length > 1) {
             val pricePart = text.removeSuffix("+")
@@ -1428,8 +1460,12 @@ class PosViewModel(
     fun onSearchSubmit() {
         val rawQuery = _searchQuery.value.text.trim()
         if (rawQuery.isBlank()) return
+        
+        // Quitar ventana de cambio si se inicia nueva búsqueda
+        _showSaleSuccessOverlay.value = false
         _saleChange.value = null
         _showCardSuccess.value = false
+        successJob?.cancel()
 
         // --- Soporte para cantidad+ (Ej: 15+) ---
         if (rawQuery.endsWith("+")) {
@@ -1513,10 +1549,7 @@ class PosViewModel(
             } else {
                 repository.searchProducts(query).first().let { results ->
                     if (results.isNotEmpty()) {
-                        val stocks = mutableMapOf<String, Double>()
-                        results.forEach { p -> stocks[p.id] = repository.getStock(p.id, branchId) }
                         _searchResults.value = results
-                        _searchStocks.value = stocks
                         _selectedSearchIndex.value = 0
                         _showSearchResults.value = true
                         _currentFocusArea.value = FocusArea.SEARCH_RESULTS
@@ -1545,6 +1578,11 @@ class PosViewModel(
         _showSearchResults.value = false
         _searchResults.value = emptyList()
         _searchMultiplier.value = null
+        
+        // También quitar ventana de cambio si se limpia el buscador
+        _showSaleSuccessOverlay.value = false
+        _saleChange.value = null
+        successJob?.cancel()
     }
 
     fun moveFocus(delta: Int) {
@@ -1601,9 +1639,13 @@ class PosViewModel(
     }
 
     fun addProduct(product: Product, stock: Double, quantity: Double? = null, isReturn: Boolean = false) {
-        _showSaleSuccessOverlay.value = false
-        _saleChange.value = null
-        _showCardSuccess.value = false
+        if (_showSaleSuccessOverlay.value) {
+            _showSaleSuccessOverlay.value = false
+            _saleChange.value = null
+            _showCardSuccess.value = false
+            successJob?.cancel()
+        }
+        
         val added = currentSaleManager.addItem(product, branchId, stock, quantity, isReturn = isReturn)
         if (added) {
             // Mantener el foco en la barra de búsqueda para seguir escaneando

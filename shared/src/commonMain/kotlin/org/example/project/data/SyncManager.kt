@@ -23,6 +23,20 @@ class SyncManager(
             currentBranchId = id
             // Reiniciar observación de inventario para la nueva sucursal
             productRepository.startIncrementalSync(id)
+            
+            // Si entramos a una sucursal, verificar si ya descargamos su inventario inicial
+            scope.launch {
+                val syncKey = "is_inv_sync_done_$id"
+                if (settingsRepository.getSetting(syncKey) != "true") {
+                    println("SYNC_MANAGER: Descargando inventario inicial para sucursal $id...")
+                    try {
+                        productRepository.refreshInventory(id, isInitial = true)
+                        settingsRepository.saveSetting(syncKey, "true")
+                    } catch (e: Exception) {
+                        println("SYNC_MANAGER: Error al descargar inventario: ${e.message}")
+                    }
+                }
+            }
         } else {
             currentBranchId = id
         }

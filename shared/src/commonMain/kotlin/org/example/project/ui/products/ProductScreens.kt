@@ -537,7 +537,6 @@ fun ProductListScreen(
                             val priceToDisplay = when(defaultPriceLevel) {
                                 1 -> product.price1
                                 2 -> product.price2
-                                4 -> product.price4
                                 else -> product.price3
                             }
                             Text("$${priceToDisplay.formatPrice()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = Color(0xFF2E7D32))
@@ -706,10 +705,9 @@ fun ProductInfoTab(product: Product) {
                     PriceRow("Costo Con IVA", "$${(product.cost * (1 + product.tax / 100)).formatPrice()}", Color(0xFF4CAF50))
                 }
                 HorizontalDivider()
-                PriceRow("Precio Público (P3)", "$${product.price3.formatPrice()}", Color(0xFF2E7D32))
+                PriceRow("Precio Público (P2)", "$${product.price2.formatPrice()}", Color(0xFF2E7D32))
                 PriceRow("Precio Mayoreo (P1)", "$${product.price1.formatPrice()}", Color(0xFF2196F3))
-                PriceRow("Precio Especial (P2)", "$${product.price2.formatPrice()}", Color(0xFF673AB7))
-                PriceRow("Precio Reserva (P4)", "$${product.price4.formatPrice()}", Color(0xFFFFA000))
+                PriceRow("Precio Adicional (P3)", "$${product.price3.formatPrice()}", Color(0xFF673AB7))
             }
         }
     }
@@ -971,12 +969,10 @@ fun ProductEditDialog(
                     OutlinedTextField(
                         value = product.barcode,
                         onValueChange = { onUpdate(product.copy(barcode = it)) },
-                        label = { Text("Código de Barras") },
+                        label = { Text("1. Código de Barras") },
                         modifier = Modifier.weight(1f).focusRequester(barcodeFocusRequester).onPreviewKeyEvent {
-                            if (it.key == Key.Enter || it.key == Key.NumPadEnter) {
-                                if (it.type == KeyEventType.KeyDown) {
-                                    nameFocusRequester.requestFocus()
-                                }
+                            if ((it.key == Key.Enter || it.key == Key.NumPadEnter) && it.type == KeyEventType.KeyDown) {
+                                nameFocusRequester.requestFocus()
                                 true
                             } else false
                         },
@@ -999,12 +995,10 @@ fun ProductEditDialog(
                 OutlinedTextField(
                     value = product.name,
                     onValueChange = { onUpdate(product.copy(name = it)) },
-                    label = { Text("Nombre del Producto") },
+                    label = { Text("2. Nombre del Producto") },
                     modifier = Modifier.fillMaxWidth().focusRequester(nameFocusRequester).onPreviewKeyEvent {
-                        if (it.key == Key.Enter || it.key == Key.NumPadEnter) {
-                            if (it.type == KeyEventType.KeyDown) {
-                                categoryFocusRequester.requestFocus()
-                            }
+                        if ((it.key == Key.Enter || it.key == Key.NumPadEnter) && it.type == KeyEventType.KeyDown) {
+                            categoryFocusRequester.requestFocus()
                             true
                         } else false
                     },
@@ -1013,27 +1007,6 @@ fun ProductEditDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                // 2.5 URL DE IMAGEN Y SAT
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = product.imagePath ?: "",
-                        onValueChange = { onUpdate(product.copy(imagePath = it.ifBlank { null })) },
-                        label = { Text("URL de Imagen") },
-                        modifier = Modifier.weight(1f),
-                        leadingIcon = { Icon(Icons.Default.Link, null) },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = product.satCode ?: "",
-                        onValueChange = { onUpdate(product.copy(satCode = it.ifBlank { null })) },
-                        label = { Text("Clave SAT") },
-                        modifier = Modifier.weight(0.5f),
-                        singleLine = true
-                    )
-                }
-
-                Spacer(Modifier.height(16.dp))
-                
                 // 3. CATEGORIA E IVA
                 var showNewCategoryDialog by remember { mutableStateOf(false) }
                 var catExpanded by remember { mutableStateOf(false) }
@@ -1052,7 +1025,6 @@ fun ProductEditDialog(
                                     } else false
                                 }
                             ) {
-
                                 Text(product.category.ifBlank { "Seleccionar..." })
                                 Spacer(Modifier.weight(1f))
                                 Icon(Icons.Default.ArrowDropDown, null)
@@ -1079,7 +1051,6 @@ fun ProductEditDialog(
                                     } else false
                                 }
                             ) {
-
                                 Text(if (product.tax > 0) "IVA ${product.tax.toInt()}%" else "Sin Impuestos")
                                 Spacer(Modifier.weight(1f))
                                 Icon(Icons.Default.ArrowDropDown, null)
@@ -1142,20 +1113,17 @@ fun ProductEditDialog(
 
                 Spacer(Modifier.height(16.dp))
                 
-                // 4. COSTO (Y precios automáticos)
-                Text("Costo de Compra", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                // 4. COSTOS Y PRECIOS
+                Text("Costos y Precios", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Costo Sin IVA
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Costo Sin IVA", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1976D2))
                         OutlinedTextField(
                             value = product.cost.toString(),
                             onValueChange = { it.toDoubleOrNull()?.let { v -> onUpdate(product.copy(cost = v)) } },
                             modifier = Modifier.fillMaxWidth().focusRequester(costFocusRequester).onPreviewKeyEvent {
-                                if (it.key == Key.Enter || it.key == Key.NumPadEnter) {
-                                    if (it.type == KeyEventType.KeyDown) {
-                                        if (product.name.isNotBlank() && product.cost > 0) onSave() else saveButtonFocusRequester.requestFocus()
-                                    }
+                                if ((it.key == Key.Enter || it.key == Key.NumPadEnter) && it.type == KeyEventType.KeyDown) {
+                                    saveButtonFocusRequester.requestFocus()
                                     true
                                 } else false
                             },
@@ -1165,7 +1133,6 @@ fun ProductEditDialog(
                         )
                     }
 
-                    // Costo Con IVA
                     if (product.tax > 0.0) {
                         val costWithTax = product.cost * (1 + product.tax / 100)
                         Column(modifier = Modifier.weight(1f)) {
@@ -1194,79 +1161,57 @@ fun ProductEditDialog(
                     }
                 }
                 
-                if (product.tax > 0.0) {
-                    Text("Nota: El Precio Público (P3) se calcula sumando un 30% al costo con IVA.", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                } else {
-                    Text("Nota: El Precio Público (P3) se calcula sumando un 30% al costo sin IVA.", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                }
+                Spacer(Modifier.height(12.dp))
 
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Precio sugerido al Público (P3):", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                        Text("$ ${product.price3.formatPrice()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = product.price1.toString(),
+                        onValueChange = { it.toDoubleOrNull()?.let { v -> onUpdate(product.copy(price1 = v)) } },
+                        label = { Text("P1 (Mayoreo)") },
+                        modifier = Modifier.weight(1f).focusRequester(p1FocusRequester).onPreviewKeyEvent {
+                            if ((it.key == Key.Enter || it.key == Key.NumPadEnter) && it.type == KeyEventType.KeyDown) {
+                                p2FocusRequester.requestFocus()
+                                true
+                            } else false
+                        },
+                        prefix = { Text("$") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = product.price2.toString(),
+                        onValueChange = { it.toDoubleOrNull()?.let { v -> onUpdate(product.copy(price2 = v)) } },
+                        label = { Text("P2 (Público - DEFAULT)") },
+                        modifier = Modifier.weight(1f).focusRequester(p2FocusRequester).onPreviewKeyEvent {
+                            if ((it.key == Key.Enter || it.key == Key.NumPadEnter) && it.type == KeyEventType.KeyDown) {
+                                p3FocusRequester.requestFocus()
+                                true
+                            } else false
+                        },
+                        prefix = { Text("$") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
                 }
                 
-                Spacer(Modifier.height(16.dp))
-
-                // Colapsar precios manuales en una sección menos prominente o mantenerlos solo para revisión
-                var showAdvancedPrices by remember { mutableStateOf(false) }
-                TextButton(onClick = { showAdvancedPrices = !showAdvancedPrices }) {
-                    Text(if(showAdvancedPrices) "Ocultar Precios Manuales" else "Ver/Editar Precios Manuales")
-                }
-
-                if (showAdvancedPrices) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
-                            value = product.price3.toString(),
-                            onValueChange = { it.toDoubleOrNull()?.let { v -> onUpdate(product.copy(price3 = v)) } },
-                            label = { Text("P. Público (P3)") },
-                            modifier = Modifier.weight(1f).focusRequester(p3FocusRequester).onPreviewKeyEvent {
-                                if (it.key == Key.Enter || it.key == Key.NumPadEnter) {
-                                    if (it.type == KeyEventType.KeyDown) p1FocusRequester.requestFocus()
-                                    true
-                                } else false
-                            },
-                            prefix = { Text("$") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                        )
-                        OutlinedTextField(
-                            value = product.price1.toString(),
-                            onValueChange = { it.toDoubleOrNull()?.let { v -> onUpdate(product.copy(price1 = v)) } },
-                            label = { Text("P1 (Mayoreo)") },
-                            modifier = Modifier.weight(1f).focusRequester(p1FocusRequester).onPreviewKeyEvent {
-                                if (it.key == Key.Enter || it.key == Key.NumPadEnter) {
-                                    if (it.type == KeyEventType.KeyDown) p2FocusRequester.requestFocus()
-                                    true
-                                } else false
-                            },
-                            prefix = { Text("$") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                        )
-                    }
-                    
-                    Spacer(Modifier.height(12.dp))
-                    
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
-                            value = product.price2.toString(),
-                            onValueChange = { it.toDoubleOrNull()?.let { v -> onUpdate(product.copy(price2 = v)) } },
-                            label = { Text("P2 (Especial)") },
-                            modifier = Modifier.weight(1f).focusRequester(p2FocusRequester).onPreviewKeyEvent {
-                                if (it.key == Key.Enter || it.key == Key.NumPadEnter) {
-                                    if (it.type == KeyEventType.KeyDown && product.name.isNotBlank() && product.price3 > 0) onSave()
-                                    true
-                                } else false
-                            },
-                            prefix = { Text("$") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                        )
-                        Box(modifier = Modifier.weight(1f)) // Placeholder
-                    }
+                Spacer(Modifier.height(12.dp))
+                
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = product.price3.toString(),
+                        onValueChange = { it.toDoubleOrNull()?.let { v -> onUpdate(product.copy(price3 = v)) } },
+                        label = { Text("P3 (Adicional +0.50)") },
+                        modifier = Modifier.weight(1f).focusRequester(p3FocusRequester).onPreviewKeyEvent {
+                            if ((it.key == Key.Enter || it.key == Key.NumPadEnter) && it.type == KeyEventType.KeyDown) {
+                                saveButtonFocusRequester.requestFocus()
+                                true
+                            } else false
+                        },
+                        prefix = { Text("$") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
+                    Box(modifier = Modifier.weight(1f)) 
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -1291,6 +1236,33 @@ fun ProductEditDialog(
                     Checkbox(checked = product.showInWebShop, onCheckedChange = { onUpdate(product.copy(showInWebShop = it)) })
                     Text("Mostrar en WebShop")
                 }
+
+                Spacer(Modifier.height(16.dp))
+                
+                // EXTRA: URL DE IMAGEN Y SAT (Menos prominente ahora)
+                var showExtraInfo by remember { mutableStateOf(false) }
+                TextButton(onClick = { showExtraInfo = !showExtraInfo }) {
+                    Text(if(showExtraInfo) "Ocultar Datos Extra (Imagen/SAT)" else "Ver Datos Extra (Imagen/SAT)")
+                }
+                if (showExtraInfo) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = product.imagePath ?: "",
+                            onValueChange = { onUpdate(product.copy(imagePath = it.ifBlank { null })) },
+                            label = { Text("URL de Imagen") },
+                            modifier = Modifier.weight(1f),
+                            leadingIcon = { Icon(Icons.Default.Link, null) },
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = product.satCode ?: "",
+                            onValueChange = { onUpdate(product.copy(satCode = it.ifBlank { null })) },
+                            label = { Text("Clave SAT") },
+                            modifier = Modifier.weight(0.5f),
+                            singleLine = true
+                        )
+                    }
+                }
                 
                 // 6. CODIGOS ADICIONALES
                 var showExtraBarcodes by remember { mutableStateOf(false) }
@@ -1310,7 +1282,12 @@ fun ProductEditDialog(
             Button(
                 onClick = onSave, 
                 enabled = product.name.isNotBlank(),
-                modifier = Modifier.focusRequester(saveButtonFocusRequester)
+                modifier = Modifier.focusRequester(saveButtonFocusRequester).onPreviewKeyEvent {
+                    if ((it.key == Key.Enter || it.key == Key.NumPadEnter) && it.type == KeyEventType.KeyDown && product.name.isNotBlank()) {
+                        onSave()
+                        true
+                    } else false
+                }
             ) {
                 Icon(Icons.Default.Save, null)
                 Spacer(Modifier.width(8.dp))

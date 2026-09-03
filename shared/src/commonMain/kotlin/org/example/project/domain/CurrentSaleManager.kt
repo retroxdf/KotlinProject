@@ -19,8 +19,9 @@ class CurrentSaleManager(
 
     private var groupItems = true
     private var allowNegativeStock = false
-    private var defaultPriceLevel = 3
+    private var defaultPriceLevel = 2
     private var addAtTop = false
+    private var isWholesaleEnabled = false
     private var activePromotions: List<Promotion> = emptyList()
     private var branchId: String = ""
 
@@ -98,6 +99,11 @@ class CurrentSaleManager(
         addAtTop = enabled
     }
 
+    fun setWholesaleEnabled(enabled: Boolean) {
+        isWholesaleEnabled = enabled
+        updateTotal()
+    }
+
     fun addItem(product: Product, branchId: String, currentStock: Double, quantity: Double? = null, isWebDiscounted: Boolean = false, isReturn: Boolean = false): Boolean {
         val qty = quantity ?: 1.0
         if (!isReturn && qty <= 0) return false
@@ -117,12 +123,12 @@ class CurrentSaleManager(
         val basePrice = when(defaultPriceLevel) {
             1 -> product.price1
             2 -> product.price2
-            4 -> product.price4
             else -> product.price3
         }
 
         // Aplicar Promociones Simples (Precio Fijo o Categoría %)
         var finalPrice = basePrice
+        var promoApplied = false
         val now = com.abtsplazita.posplazita.currentTimeMillis()
         
         val promo = if (isReturn) null else activePromotions.find { 
@@ -134,6 +140,7 @@ class CurrentSaleManager(
         if (promo != null) {
             finalPrice = if (promo.type == PromotionType.FIXED_PRICE) promo.discountValue 
                         else basePrice * (1.0 - (promo.discountValue / 100.0))
+            promoApplied = true
         }
 
         val mainPrice = finalPrice.roundToNearestHalf()
@@ -162,7 +169,11 @@ class CurrentSaleManager(
             category = product.category,
             isService = product.isService,
             isBulk = product.isBulk,
-            isWebDiscounted = isWebDiscounted
+            isWebDiscounted = isWebDiscounted,
+            price1 = product.price1,
+            price2 = product.price2,
+            price3 = product.price3,
+            isPromoApplied = promoApplied
         )
 
         if (addAtTop) _currentItems.value = listOf(newItem) + _currentItems.value
@@ -211,7 +222,10 @@ class CurrentSaleManager(
     private fun updateTotal() {
         val now = com.abtsplazita.posplazita.currentTimeMillis()
         val itemsWithPromos = _currentItems.value.map { item ->
-            var subtotal = item.quantity * item.priceAtSale
+            var currentPrice = item.priceAtSale
+            var promoApplied = item.isPromoApplied
+            
+            var subtotal = item.quantity * currentPrice
             
             val bulkPromo = activePromotions.find { 
                 it.isActive && now >= it.startDate && now <= it.endDate &&
@@ -222,10 +236,11 @@ class CurrentSaleManager(
             if (bulkPromo != null) {
                 val numPackages = (item.quantity / bulkPromo.triggerQuantity).toInt()
                 val remainder = item.quantity % bulkPromo.triggerQuantity
-                subtotal = (numPackages * bulkPromo.discountValue) + (remainder * item.priceAtSale)
+                subtotal = (numPackages * bulkPromo.discountValue) + (remainder * currentPrice)
+                promoApplied = true
             }
 
-            item.copy(subtotal = subtotal.roundToNearestHalf())
+            item.copy(priceAtSale = currentPrice, subtotal = subtotal.roundToNearestHalf(), isPromoApplied = promoApplied)
         }
         
         var rawTotal = itemsWithPromos.sumOf { it.subtotal }

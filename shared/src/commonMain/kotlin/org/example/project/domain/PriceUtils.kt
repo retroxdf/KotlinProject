@@ -34,3 +34,67 @@ fun Double.formatPrice(): String {
         "$stringVal.00"
     }
 }
+
+/**
+ * Calcula la utilidad (markup) basado en el costo y precio.
+ * Retorna el porcentaje sobre el costo (Markup).
+ * Ejemplo: Costo 10, Precio 13 -> 30%
+ */
+fun calculateUtility(cost: Double, price: Double): Double {
+    if (cost <= 0) return 0.0
+    return ((price - cost) / cost) * 100.0
+}
+
+/**
+ * Calcula el precio sugerido basado en un porcentaje de utilidad (markup) deseado.
+ * Price = Cost * (1 + Markup)
+ */
+fun calculatePriceFromUtility(cost: Double, utilityPercent: Double): Double {
+    val markup = utilityPercent / 100.0
+    return (cost * (1.0 + markup)).roundToNearestHalf()
+}
+
+/**
+ * Calcula el Precio 1 (Mayoreo) basado en el costo según las reglas del negocio.
+ */
+fun calculateDefaultPrice1(cost: Double): Double {
+    val utility = when {
+        cost <= 10.0 -> 17.0
+        cost <= 20.0 -> 15.0
+        cost <= 30.0 -> 10.0
+        cost <= 40.0 -> 9.0
+        cost <= 50.0 -> 8.0
+        cost <= 60.0 -> 7.0
+        cost <= 70.0 -> 6.0
+        cost <= 80.0 -> 5.0
+        cost <= 90.0 -> 5.0 
+        cost <= 110.0 -> 4.0
+        cost <= 500.0 -> 3.0
+        else -> 3.0
+    }
+    return calculatePriceFromUtility(cost, utility)
+}
+
+/**
+ * Calcula el Precio 2 (Público - DEFAULT) basado en el costo según las reglas del negocio (Markup escalonado).
+ */
+fun calculateDefaultPrice2(cost: Double): Double {
+    val utility = when {
+        cost <= 30.0 -> 30.0
+        cost <= 50.0 -> 25.0
+        cost <= 80.0 -> 20.0
+        cost <= 100.0 -> 15.0
+        cost <= 200.0 -> 13.0
+        cost <= 500.0 -> 10.0
+        else -> 10.0
+    }
+    return calculatePriceFromUtility(cost, utility)
+}
+
+/**
+ * Calcula el Precio 3 (Público + 0.50) basado en el Precio 2.
+ */
+fun calculateDefaultPrice3(cost: Double): Double {
+    val p2 = calculateDefaultPrice2(cost)
+    return p2 + 0.50
+}

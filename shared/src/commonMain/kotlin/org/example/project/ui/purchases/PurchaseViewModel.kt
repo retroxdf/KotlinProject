@@ -546,12 +546,11 @@ class PurchaseViewModel(
                 id = "P${currentTimeMillis()}",
                 name = name,
                 barcode = barcode,
-                price3 = price, // Precio Público por defecto (P3)
+                price2 = price, // Precio Público por defecto (P2 - Nuevo Default)
                 imagePath = imagePath,
-                // Establecer otros precios base proporcionales si se desea
-                price1 = price * 0.8,
-                price2 = price * 0.9,
-                price4 = price * 1.1,
+                price1 = price * 0.9,
+                price3 = price + 0.50,
+                price4 = 0.0,
                 unit = UnitType.PIECE
             )
             try {

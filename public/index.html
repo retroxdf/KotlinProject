@@ -10,122 +10,197 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         [v-cloak] { display: none; }
-        .product-card:hover { transform: translateY(-5px); transition: all 0.3s ease; }
+        .product-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .product-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
         @keyframes slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes slide-in-left { from { transform: translateX(-100%); } to { transform: translateX(0); } }
         @keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .animate-slide-in { animation: slide-in 0.3s ease-out; }
+        .animate-slide-in-left { animation: slide-in-left 0.3s ease-out; }
         .animate-pop { animation: pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-slate-50 min-h-screen font-sans">
     <div id="app" v-cloak>
         <!-- CABECERA -->
-        <header class="bg-indigo-600 text-white shadow-lg sticky top-0 z-50">
-            <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-                <h1 class="text-2xl font-bold tracking-tight"><i class="fas fa-store mr-2"></i>PLAZITA WEBSHOP</h1>
-                <button @click="showCart = true" class="relative p-2 bg-indigo-500 rounded-full hover:bg-indigo-400 transition">
-                    <i class="fas fa-shopping-cart text-xl"></i>
-                    <span v-if="cartCount > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
-                        {{ cartCount }}
-                    </span>
-                </button>
+        <header class="bg-white border-b sticky top-0 z-50">
+            <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <button @click="showFilters = true" class="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-xl transition">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    <h1 class="text-xl font-black tracking-tighter text-indigo-600 cursor-pointer" @click="resetFilters">PLAZITA</h1>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="showCart = true" class="relative w-11 h-11 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all duration-300">
+                        <i class="fas fa-shopping-basket text-lg"></i>
+                        <span v-if="cartCount > 0" class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full h-5 w-5 flex items-center justify-center font-black border-2 border-white">
+                            {{ cartCount }}
+                        </span>
+                    </button>
+                </div>
             </div>
         </header>
 
-        <main class="container mx-auto px-4 py-8">
+        <main class="container mx-auto px-4 py-6">
             <!-- 1. SELECTOR DE SUCURSAL -->
-            <div v-if="!selectedBranch" class="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8 text-center border-t-8 border-indigo-600">
-                <i class="fas fa-map-marker-alt text-6xl text-indigo-200 mb-6"></i>
-                <h2 class="text-3xl font-extrabold text-gray-800 mb-2">Bienvenido</h2>
-                <p class="text-gray-500 mb-8">Selecciona tu sucursal para ver existencias en tiempo real.</p>
-                <div class="grid gap-4">
+            <div v-if="!selectedBranch" class="max-w-md mx-auto py-12 text-center">
+                <div class="w-20 h-20 bg-indigo-100 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-6 rotate-3">
+                    <i class="fas fa-map-pin text-3xl"></i>
+                </div>
+                <h2 class="text-2xl font-black text-gray-800 mb-2">¿Dónde te encuentras?</h2>
+                <p class="text-gray-500 mb-8 text-sm font-medium">Selecciona una sucursal para ver los productos disponibles.</p>
+                <div class="grid gap-3">
                     <button v-for="branch in branches" :key="branch.id" @click="selectBranch(branch)"
-                            class="w-full py-4 px-6 bg-gray-50 border-2 border-gray-100 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition text-left flex justify-between items-center group">
+                            class="group p-5 bg-white border border-gray-100 rounded-3xl hover:border-indigo-600 transition-all text-left flex justify-between items-center shadow-sm">
                         <div>
-                            <div class="font-bold text-lg text-gray-800 group-hover:text-indigo-600">{{ branch.name }}</div>
-                            <div class="text-sm text-gray-400">{{ branch.address }}</div>
+                            <div class="font-black text-gray-800 group-hover:text-indigo-600 transition-colors">{{ branch.name }}</div>
+                            <div class="text-xs text-gray-400 font-bold uppercase mt-0.5 tracking-wider">{{ branch.address }}</div>
                         </div>
-                        <i class="fas fa-chevron-right text-gray-300 group-hover:text-indigo-500 transition"></i>
+                        <div class="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-300 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                            <i class="fas fa-chevron-right text-xs"></i>
+                        </div>
                     </button>
                 </div>
             </div>
 
-            <!-- 2. CATÁLOGO DE PRODUCTOS -->
+            <!-- 2. CATÁLOGO -->
             <div v-else>
-                <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                    <div>
-                        <button @click="selectedBranch = null" class="text-indigo-600 font-bold flex items-center mb-1"><i class="fas fa-arrow-left mr-2"></i> Cambiar Sucursal</button>
-                        <h2 class="text-3xl font-black text-gray-800 uppercase">{{ selectedBranch.name }}</h2>
-                    </div>
-                    <div class="relative w-full md:w-96">
+                <!-- BUSCADOR -->
+                <div class="mb-8 flex gap-3">
+                    <div class="relative flex-1">
                         <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                        <input v-model="search" type="text" placeholder="Buscar producto..." class="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-100 focus:border-indigo-500 focus:outline-none shadow-sm">
+                        <input v-model="search" type="text" placeholder="Buscar productos..."
+                               class="w-full pl-12 pr-4 py-4 rounded-2xl bg-white border-none focus:ring-2 focus:ring-indigo-600 shadow-sm font-bold text-gray-700">
                     </div>
                 </div>
 
-                <div v-if="loading" class="flex justify-center py-20"><div class="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600"></div></div>
+                <div v-if="loading" class="flex flex-col items-center py-20">
+                    <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-100 border-t-indigo-600 mb-4"></div>
+                    <p class="text-gray-400 font-black text-xs tracking-widest uppercase">Actualizando stock...</p>
+                </div>
                 
-                <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div v-for="product in filteredProducts" :key="product.id" class="bg-white rounded-2xl shadow-sm border border-gray-100 product-card flex flex-col p-4">
-                        <div class="h-40 bg-gray-100 rounded-xl mb-4 overflow-hidden relative">
-                            <img v-if="product.imagePath" :src="product.imagePath" class="w-full h-full object-cover">
-                            <div v-else class="w-full h-full flex items-center justify-center text-gray-300"><i class="fas fa-image text-4xl"></i></div>
+                <div v-else>
+                    <!-- SECCIÓN RECIÉN SURTIDOS -->
+                    <div v-if="!search && selectedCategory === 'TODOS' && recentProducts.length > 0" class="mb-12">
+                        <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                            <span class="w-1.5 h-4 bg-orange-500 rounded-full"></span>
+                            Nuevos en {{ selectedBranch.name }}
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                            <product-card v-for="product in recentProducts" :key="'recent-'+product.id" :product="product" @add="addToCart" @update="updateCartQty" @manual="manualQtyByPid"></product-card>
                         </div>
-                        <h3 class="font-bold text-gray-800 mb-1 line-clamp-2 h-12">{{ product.name }}</h3>
-                        <div class="flex justify-between items-end mt-2 mb-4">
-                            <div>
-                                <span class="text-gray-400 text-xs block">Precio</span>
-                                <span class="text-indigo-600 font-black text-xl">${{ product.price3.toFixed(2) }}</span>
-                            </div>
-                            <span class="text-xs font-bold px-2 py-1 bg-green-50 text-green-600 rounded-lg">Stock: {{ product.stock }}</span>
-                        </div>
-                        <button @click="addToCart(product)" :disabled="product.stock <= 0" 
-                                class="w-full py-3 rounded-xl font-bold transition"
-                                :class="product.stock > 0 ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 text-gray-400'">
-                            {{ product.stock > 0 ? 'AGREGAR' : 'AGOTADO' }}
-                        </button>
+                        <div class="h-px bg-gray-200 mt-12 mb-8"></div>
+                    </div>
+
+                    <!-- TODO EL CATÁLOGO -->
+                    <h3 v-if="selectedCategory !== 'TODOS' || search" class="text-sm font-black text-gray-400 uppercase tracking-widest mb-6">
+                        {{ selectedCategory }} ({{ filteredProducts.length }})
+                    </h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                        <product-card v-for="product in filteredProducts" :key="product.id" :product="product" @add="addToCart" @update="updateCartQty" @manual="manualQtyByPid"></product-card>
+                    </div>
+
+                    <div v-if="filteredProducts.length === 0" class="text-center py-20">
+                        <i class="fas fa-search text-5xl text-gray-200 mb-4"></i>
+                        <p class="text-gray-400 font-bold">No encontramos coincidencias</p>
                     </div>
                 </div>
             </div>
         </main>
 
-        <!-- 3. MODAL DE CARRITO -->
-        <div v-if="showCart" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex justify-end">
-            <div class="w-full max-w-lg bg-white h-screen shadow-2xl flex flex-col animate-slide-in">
-                <div class="p-6 border-b flex justify-between items-center bg-indigo-50">
-                    <h2 class="text-xl font-black text-indigo-900">MI CARRITO</h2>
-                    <button @click="showCart = false"><i class="fas fa-times text-2xl text-gray-400"></i></button>
+        <!-- SIDEBAR DE FILTROS (IZQUIERDA) -->
+        <div v-if="showFilters" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex">
+            <div class="w-full max-w-[280px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in-left">
+                <div class="p-6 border-b flex justify-between items-center bg-gray-50">
+                    <h2 class="font-black text-gray-800 tracking-tight">CATEGORÍAS</h2>
+                    <button @click="showFilters = false" class="text-gray-400 hover:text-red-500"><i class="fas fa-times text-xl"></i></button>
                 </div>
-                <div class="flex-1 overflow-y-auto p-6">
-                    <div v-for="(item, index) in cart" :key="index" class="flex items-center gap-4 bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100">
-                        <div class="flex-1">
-                            <div class="font-bold text-gray-800">{{ item.productName }}</div>
-                            <div class="text-indigo-600 font-bold">$ {{ item.subtotal.toFixed(2) }}</div>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <button @click="updateQty(index, -1)" class="w-8 h-8 border rounded-full bg-white">-</button>
-                            <span class="font-black">{{ item.quantity }}</span>
-                            <button @click="updateQty(index, 1)" class="w-8 h-8 border rounded-full bg-white">+</button>
-                        </div>
+                <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+                    <button v-for="cat in categories" :key="cat" @click="selectedCategory = cat; showFilters = false"
+                            class="w-full p-4 rounded-2xl text-left font-black text-sm transition-all flex items-center justify-between group"
+                            :class="selectedCategory === cat ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-[1.02]' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'">
+                        {{ cat }}
+                        <i v-if="selectedCategory === cat" class="fas fa-check-circle"></i>
+                    </button>
+                </div>
+                <div class="p-6 border-t bg-gray-50">
+                    <button @click="resetFilters(); showFilters = false" class="w-full py-3 text-indigo-600 font-black text-sm uppercase tracking-widest">Limpiar Filtros</button>
+                </div>
+            </div>
+            <div class="flex-1" @click="showFilters = false"></div>
+        </div>
+
+        <!-- MODAL DE CARRITO (DERECHA) -->
+        <div v-if="showCart" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex justify-end">
+            <div class="flex-1" @click="showCart = false"></div>
+            <div class="w-full max-w-lg bg-white h-screen shadow-2xl flex flex-col animate-slide-in">
+                <div class="p-6 border-b flex justify-between items-center bg-indigo-600 text-white">
+                    <div>
+                        <h2 class="text-xl font-black uppercase tracking-tight">Tu Pedido</h2>
+                        <p class="text-[10px] opacity-70 font-black tracking-widest">{{ cartCount }} ARTÍCULOS</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button v-if="cart.length > 0" @click="if(confirm('¿Vaciar todo el carrito?')) { cart = []; updateTotals(); }"
+                                class="text-[10px] font-black bg-white/10 px-3 py-2 rounded-xl hover:bg-red-500 transition-colors uppercase tracking-tighter">
+                            <i class="fas fa-trash-alt mr-1"></i> Vaciar
+                        </button>
+                        <button @click="showCart = false" class="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center hover:bg-white/30 transition">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
                 </div>
-                <div v-if="cart.length > 0" class="p-6 border-t bg-gray-50">
-                    <div class="flex justify-between mb-6">
-                        <span class="font-bold text-gray-500 uppercase tracking-widest">Total:</span>
-                        <span class="text-3xl font-black text-indigo-600">$ {{ cartTotal.toFixed(2) }}</span>
+                <div class="flex-1 overflow-y-auto p-6 bg-gray-50/50 space-y-4">
+                    <div v-for="(item, index) in cart" :key="index" class="flex items-center gap-4 bg-white p-4 rounded-3xl shadow-sm border border-gray-100 group">
+                        <div class="w-16 h-16 bg-gray-50 rounded-2xl overflow-hidden flex-shrink-0">
+                            <img v-if="item.imagePath" :src="item.imagePath" class="w-full h-full object-cover">
+                            <div v-else class="w-full h-full flex items-center justify-center text-gray-300"><i class="fas fa-box"></i></div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-black text-gray-800 text-sm truncate leading-tight">{{ item.productName }}</div>
+                            <div class="text-indigo-600 font-black mt-1">$ {{ item.subtotal.toFixed(2) }}</div>
+                        </div>
+                        <div class="flex flex-col items-end gap-2">
+                            <button @click="cart.splice(index, 1); updateTotals()" class="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-red-500 transition-colors">
+                                <i class="fas fa-trash-can text-sm"></i>
+                            </button>
+                            <div class="flex items-center bg-gray-100 rounded-xl p-1 gap-1">
+                                <button @click="updateQty(index, -1)" class="w-7 h-7 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-500 hover:text-red-500"><i class="fas fa-minus text-[10px]"></i></button>
+                                <span @click="manualQty(index)" class="font-black w-8 text-center text-xs cursor-pointer hover:text-indigo-600 transition">{{ item.quantity }}</span>
+                                <button @click="updateQty(index, 1)" class="w-7 h-7 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-500 hover:text-indigo-600"><i class="fas fa-plus text-[10px]"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="cart.length === 0" class="text-center py-32 opacity-20">
+                        <i class="fas fa-shopping-basket text-8xl mb-4"></i>
+                        <p class="font-black uppercase tracking-widest text-sm">Carrito vacío</p>
+                    </div>
+                </div>
+                <div v-if="cart.length > 0" class="p-8 border-t bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+                    <div class="flex justify-between items-end mb-8">
+                        <span class="font-black text-gray-400 uppercase tracking-widest text-xs">Total:</span>
+                        <span class="text-4xl font-black text-gray-800 tracking-tighter">$ {{ cartTotal.toFixed(2) }}</span>
                     </div>
                     
                     <div v-if="!checkout">
-                        <button @click="checkout = true" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-lg">CONTINUAR</button>
+                        <button @click="checkout = true" class="w-full py-5 bg-indigo-600 text-white rounded-[24px] font-black text-lg shadow-xl shadow-indigo-100 active:scale-95 transition-all">FINALIZAR PEDIDO</button>
                     </div>
                     <div v-else class="space-y-4">
-                        <input v-model="orderData.name" placeholder="Tu Nombre / Identificador" class="w-full p-4 border-2 rounded-xl focus:border-indigo-500 focus:outline-none">
-                        <input v-model="orderData.address" placeholder="Mesa / Dirección / Notas" class="w-full p-4 border-2 rounded-xl focus:border-indigo-500 focus:outline-none">
-                        <div class="flex gap-2">
-                            <button @click="checkout = false" class="px-6 bg-gray-200 rounded-xl font-bold">VOLVER</button>
+                        <div class="relative">
+                            <i class="fas fa-user absolute left-5 top-1/2 -translate-y-1/2 text-indigo-600"></i>
+                            <input v-model="orderData.name" placeholder="Tu nombre..." class="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 font-bold">
+                        </div>
+                        <div class="relative">
+                            <i class="fas fa-comment absolute left-5 top-1/2 -translate-y-1/2 text-indigo-600"></i>
+                            <input v-model="orderData.address" placeholder="Notas o dirección..." class="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 font-bold">
+                        </div>
+                        <div class="flex gap-3 pt-2">
+                            <button @click="checkout = false" class="px-6 bg-gray-100 text-gray-400 rounded-2xl font-black text-xs uppercase tracking-widest">Volver</button>
                             <button @click="sendOrder" :disabled="sending || !orderData.name" 
-                                    class="flex-1 py-4 bg-green-600 text-white rounded-2xl font-black text-lg disabled:bg-gray-300">
-                                {{ sending ? 'ENVIANDO...' : 'ENVIAR PEDIDO' }}
+                                    class="flex-1 py-5 bg-green-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-green-100 active:scale-95 transition-all disabled:opacity-50">
+                                {{ sending ? 'ENVIANDO...' : 'ENVIAR AHORA' }}
                             </button>
                         </div>
                     </div>
@@ -135,13 +210,13 @@
 
         <!-- 4. MENSAJE DE ÉXITO -->
         <div v-if="successOrder" class="fixed inset-0 bg-black/80 backdrop-blur z-[200] flex items-center justify-center p-4">
-            <div class="bg-white rounded-3xl p-10 text-center max-w-sm w-full animate-pop shadow-2xl">
-                <div class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i class="fas fa-check text-4xl"></i>
+            <div class="bg-white rounded-[40px] p-12 text-center max-w-sm w-full animate-pop shadow-2xl border-t-[12px] border-green-500">
+                <div class="w-24 h-24 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <i class="fas fa-check text-5xl"></i>
                 </div>
-                <h3 class="text-2xl font-black mb-2">¡PEDIDO ENVIADO!</h3>
-                <p class="text-gray-500 mb-8">Tu pedido #{{ successOrder.slice(-5) }} ha sido registrado correctamente.</p>
-                <button @click="resetAll" class="w-full py-4 bg-gray-800 text-white rounded-2xl font-bold hover:bg-black transition">ENTENDIDO</button>
+                <h3 class="text-3xl font-black mb-2 tracking-tight">¡ENVIADO!</h3>
+                <p class="text-gray-500 font-bold mb-10 leading-relaxed text-sm">Tu pedido <span class="text-indigo-600">#{{ successOrder.slice(-5) }}</span> ha sido recibido correctamente.</p>
+                <button @click="resetAll" class="w-full py-5 bg-gray-900 text-white rounded-3xl font-black hover:bg-black transition-all shadow-xl active:scale-95">ENTENDIDO</button>
             </div>
         </div>
     </div>
@@ -149,7 +224,7 @@
     <!-- LÓGICA DE FIREBASE Y VUE -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-        import { getFirestore, collection, getDocs, setDoc, doc, query, where, onSnapshot, increment, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, setDoc, doc, query, where, onSnapshot, increment, writeBatch, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
         // CONFIGURACIÓN DE FIREBASE
         const firebaseConfig = {
@@ -165,22 +240,103 @@
         const db = getFirestore(firebaseApp);
         const { createApp, ref, computed, onMounted } = Vue;
 
+        const ProductCard = {
+            props: ['product'],
+            emits: ['add', 'update', 'manual'],
+            setup(props, { emit }) {
+                return {
+                    inCartQty: computed(() => window.getInCartQty(props.product.id))
+                }
+            },
+            template: `
+                <div class="bg-white rounded-[24px] shadow-sm border border-gray-100 product-card flex flex-col p-3">
+                    <div class="h-32 md:h-40 bg-slate-50 rounded-[18px] mb-3 overflow-hidden relative">
+                        <img v-if="product.imagePath" :src="product.imagePath" class="w-full h-full object-cover">
+                        <div v-else class="w-full h-full flex items-center justify-center text-gray-200"><i class="fas fa-image text-3xl"></i></div>
+                    </div>
+                    <h3 class="font-black text-gray-800 mb-1 text-[11px] md:text-sm leading-tight line-clamp-2 h-8 md:h-10">{{ product.name }}</h3>
+                    <div class="mt-auto pt-1">
+                        <div class="flex flex-col gap-0 mb-3">
+                            <span class="text-base font-black text-gray-900">$ {{ product.price3.toFixed(2) }}</span>
+                            <span class="text-[10px] font-bold text-green-600">Stock: {{ product.stock }}</span>
+                        </div>
+
+                        <div v-if="inCartQty > 0" class="flex items-center bg-indigo-600 rounded-full p-0.5 h-10 shadow-md">
+                            <button @click="$emit('update', product.id, -1)" class="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/10 transition"><i class="fas fa-minus text-[10px]"></i></button>
+                            <span @click="$emit('manual', product.id)" class="flex-1 text-center text-white font-black text-xs cursor-pointer hover:underline">{{ inCartQty }}</span>
+                            <button @click="$emit('update', product.id, 1)" class="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/10 transition"><i class="fas fa-plus text-[10px]"></i></button>
+                        </div>
+                        <button v-else @click="$emit('add', product)" :disabled="product.stock <= 0"
+                                class="w-full h-10 rounded-full flex items-center justify-center bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm disabled:opacity-30">
+                            <i class="fas fa-shopping-cart text-base"></i>
+                        </button>
+                    </div>
+                </div>
+            `
+        };
+
         createApp({
+            components: { 'product-card': ProductCard },
             setup() {
                 const branches = ref([]), products = ref([]), inventory = ref({}), selectedBranch = ref(null);
                 const loading = ref(true), search = ref(''), showCart = ref(false), cart = ref([]), checkout = ref(false);
                 const sending = ref(false), successOrder = ref(null), orderData = ref({ name: '', address: '' });
+                const selectedCategory = ref("TODOS"), showFilters = ref(false);
 
-                const selectBranch = (branch) => { selectedBranch.value = branch; loadBranchInventory(branch.id); };
-                
+                // Categorías dinámicas: Solo las que tienen productos con stock > 0
+                const categories = computed(() => {
+                    const cats = new Set();
+                    products.value.forEach(p => {
+                        const stock = inventory.value[p.id] || 0;
+                        if (stock > 0 && p.category) cats.add(p.category);
+                    });
+                    return ["TODOS", ...Array.from(cats).sort()];
+                });
+
+                window.getInCartQty = (pid) => {
+                    const item = cart.value.find(i => i.productId === pid);
+                    return item ? item.quantity : 0;
+                };
+
+                const selectBranch = (branch) => {
+                    selectedBranch.value = branch;
+                    loadBranchInventory(branch.id);
+                    localStorage.setItem('preferred_branch_id', branch.id);
+                };
+                const resetFilters = () => { selectedCategory.value = 'TODOS'; search.value = ''; };
+
                 const loadInitialData = async () => {
                     try {
                         const bSnap = await getDocs(collection(db, "branches"));
-                        branches.value = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        const allBranches = bSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                        // FILTRO: Solo mostrar sucursales que contengan "BODEGA" o "ALMACEN"
+                        // O puedes dejarlo abierto si prefieres, pero aquí aplicamos lo solicitado:
+                        branches.value = allBranches.filter(b =>
+                            b.name.toLowerCase().includes('bodega') ||
+                            b.name.toLowerCase().includes('almacen')
+                        );
+
                         const pSnap = await getDocs(collection(db, "products"));
                         products.value = pSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                        // Auto-selección inteligente por URL o preferencia guardada
+                        const host = window.location.hostname;
+                        const savedId = localStorage.getItem('preferred_branch_id');
+
+                        let targetBranch = null;
+                        if (host.includes('bodega')) {
+                            targetBranch = branches.value.find(b => b.name.toLowerCase().includes('bodega'));
+                        }
+
+                        if (!targetBranch && savedId) {
+                            targetBranch = branches.value.find(b => b.id === savedId);
+                        }
+
+                        if (targetBranch) selectBranch(targetBranch);
+
                         loading.value = false;
-                    } catch (e) { console.error("Error inicial:", e); }
+                    } catch (e) { console.error("Error:", e); }
                 };
 
                 const loadBranchInventory = (branchId) => {
@@ -195,26 +351,52 @@
                 const filteredProducts = computed(() => {
                     return products.value
                         .map(p => ({ ...p, stock: inventory.value[p.id] || 0 }))
-                        .filter(p => p.stock > 0 && p.name.toLowerCase().includes(search.value.toLowerCase()));
+                        .filter(p => {
+                            const mS = p.name.toLowerCase().includes(search.value.toLowerCase());
+                            const mC = selectedCategory.value === "TODOS" || p.category === selectedCategory.value;
+                            return p.stock > 0 && mS && mC;
+                        });
+                });
+
+                const recentProducts = computed(() => {
+                    return [...products.value]
+                        .map(p => ({ ...p, stock: inventory.value[p.id] || 0 }))
+                        .filter(p => p.stock > 0)
+                        .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0))
+                        .slice(0, 4);
                 });
 
                 const addToCart = (p) => {
-                    const ex = cart.value.find(i => i.productId === p.id);
-                    if (ex) { if (ex.quantity < p.stock) ex.quantity++; }
-                    else {
-                        cart.value.push({ 
-                            productId: p.id, productName: p.name, 
-                            priceAtOrder: p.price3 || 0, quantity: 1, 
-                            subtotal: p.price3 || 0, imagePath: p.imagePath || null 
-                        });
-                    }
+                    cart.value.unshift({ productId: p.id, productName: p.name, priceAtOrder: p.price3 || 0, quantity: 1, subtotal: p.price3 || 0, imagePath: p.imagePath || null });
                     updateTotals();
+                };
+
+                const updateCartQty = (pid, d) => {
+                    const idx = cart.value.findIndex(i => i.productId === pid);
+                    if (idx !== -1) updateQty(idx, d);
                 };
 
                 const updateQty = (idx, d) => {
                     const i = cart.value[idx]; const stock = inventory.value[i.productId] || 0;
                     if (i.quantity + d > 0 && i.quantity + d <= stock) { i.quantity += d; updateTotals(); }
                     else if (i.quantity + d === 0) cart.value.splice(idx, 1);
+                };
+
+                const manualQty = (idx) => {
+                    const i = cart.value[idx]; const s = inventory.value[i.productId] || 0;
+                    const res = prompt(`¿Cuántas piezas deseas de "${i.productName}"? (Máximo: ${s})`, i.quantity);
+                    if (res !== null) {
+                        const v = parseFloat(res);
+                        if (!isNaN(v) && v > 0) {
+                            if (v <= s) { i.quantity = v; updateTotals(); }
+                            else { alert("Stock insuficiente. Solo hay " + s + " piezas."); i.quantity = s; updateTotals(); }
+                        } else if (v === 0) { cart.value.splice(idx, 1); updateTotals(); }
+                    }
+                };
+
+                const manualQtyByPid = (pid) => {
+                    const idx = cart.value.findIndex(i => i.productId === pid);
+                    if (idx !== -1) manualQty(idx);
                 };
 
                 const updateTotals = () => cart.value.forEach(i => i.subtotal = i.quantity * i.priceAtOrder);
@@ -226,56 +408,24 @@
                     sending.value = true;
                     try {
                         const orderId = "WEB_" + Date.now();
-                        const order = {
-                            id: orderId, timestamp: Date.now(), branchId: selectedBranch.value.id,
-                            customerName: orderData.value.name, address: orderData.value.address || "",
-                            items: cart.value.map(i => ({ 
-                                productId: i.productId, productName: i.productName, 
-                                quantity: Number(i.quantity), priceAtOrder: Number(i.priceAtOrder), 
-                                subtotal: Number(i.subtotal), isWebDiscounted: true 
-                            })),
-                            total: Number(cartTotal.value), status: "PENDING"
-                        };
-
-                        // 1. Guardar el pedido
+                        const order = { id: orderId, timestamp: Date.now(), branchId: selectedBranch.value.id, customerName: orderData.value.name, address: orderData.value.address || "", items: cart.value.map(i => ({ productId: i.productId, productName: i.productName, quantity: Number(i.quantity), priceAtOrder: Number(i.priceAtOrder), subtotal: Number(i.subtotal), isWebDiscounted: true })), total: Number(cartTotal.value), status: "PENDING" };
                         await setDoc(doc(db, "web_orders", orderId), order);
-
-                        // 2. DESCONTAR STOCK ATÓMICAMENTE (BATCH)
                         const batch = writeBatch(db);
                         order.items.forEach(i => {
                             const invRef = doc(db, "inventory", `${order.branchId}_${i.productId}`);
                             batch.update(invRef, { stock: increment(-i.quantity), lastUpdated: Date.now() });
-
-                            // 3. REGISTRAR MOVIMIENTO PARA EL POS
-                            const movId = "MOV_" + Date.now() + "_" + i.productId;
-                            const movRef = doc(db, "movements", movId);
-                            batch.set(movRef, {
-                                id: Date.now(),
-                                productId: i.productId,
-                                branchId: order.branchId,
-                                type: "OUT_SALE",
-                                quantity: Number(i.quantity),
-                                timestamp: Date.now(),
-                                userId: "web_customer",
-                                reason: "Venta Web #" + orderId.slice(-5)
-                            });
+                            batch.set(doc(db, "movements", "MOV_" + Date.now() + "_" + i.productId), { id: Date.now(), productId: i.productId, branchId: order.branchId, type: "OUT_SALE", quantity: Number(i.quantity), timestamp: Date.now(), userId: "web_customer", reason: "Venta Web #" + orderId.slice(-5) });
                         });
                         await batch.commit();
-
                         successOrder.value = orderId;
-                    } catch (e) { 
-                        console.error("Error Firebase:", e); 
-                        alert("Error al enviar pedido: " + e.message); 
-                    } finally { sending.value = false; }
+                    } catch (e) { alert("Error: " + e.message); }
+                    finally { sending.value = false; }
                 };
 
-                const resetAll = () => { 
-                    cart.value = []; showCart.value = false; checkout.value = false; 
-                    successOrder.value = null; orderData.value = { name: '', address: '' }; 
-                };
+                const resetAll = () => { cart.value = []; showCart.value = false; checkout.value = false; successOrder.value = null; orderData.value = { name: '', address: '' }; };
 
                 onMounted(loadInitialData);
-                return { branches, selectedBranch, loading, search, selectBranch, filteredProducts, addToCart, cartCount, showCart, cart, updateQty, cartTotal, checkout, orderData, sendOrder, sending, successOrder, resetAll };
+                return { branches, selectedBranch, loading, search, selectBranch, filteredProducts, recentProducts, addToCart, cartCount, showCart, cart, updateQty, manualQty, manualQtyByPid, cartTotal, checkout, orderData, sendOrder, sending, successOrder, resetAll, categories, selectedCategory, resetFilters, showFilters, updateCartQty };
             }
         }).mount('#app');
     </script>

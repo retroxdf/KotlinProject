@@ -368,7 +368,7 @@ fun QuickCreateInventoryDialog(
                 OutlinedTextField(
                     value = price,
                     onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) price = it },
-                    label = { Text("Precio Público (P3)") },
+                    label = { Text("Precio Público (P2)") },
                     prefix = { Text("$ ") },
                     modifier = Modifier
                         .fillMaxWidth()

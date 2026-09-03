@@ -29,23 +29,31 @@ class UserRepository(
     }
 
     fun initializeAdmin() {
-        MainScope().launch {
+        val activeScope = scope ?: MainScope()
+        activeScope.launch {
             try {
-                // 1. Asegurar Admin si no hay usuarios
-                val count = userDao.getUserCount()
-                if (count == 0) {
+                // 1. Asegurar Admin u001 (siempre debe existir)
+                val adminId = "u001"
+                val existingAdmin = userDao.getUserById(adminId)
+                
+                if (existingAdmin == null) {
                     val admin = User(
-                        id = "u001",
+                        id = adminId,
                         username = "admin",
                         firstName = "Administrador",
                         lastName = "Principal",
                         nip = "1385",
                         role = Role.SUPER_ADMIN,
                         mustChangeNip = false,
-                        isActive = true
+                        isActive = true,
+                        lastUpdated = com.abtsplazita.posplazita.currentTimeMillis()
                     )
                     userDao.insertUser(admin.toEntity())
-                    println("USER_REPO: Administrador u001 creado por defecto.")
+                    firebaseManager?.syncUser(admin)
+                    println("USER_REPO: Administrador u001 creado y sincronizado.")
+                } else {
+                    // Asegurar que el admin local esté en la nube
+                    firebaseManager?.syncUser(existingAdmin.toDomain())
                 }
 
 

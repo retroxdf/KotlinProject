@@ -48,25 +48,29 @@ class AndroidPrinterManager : PrinterManager {
         config: TicketConfig?,
         branchName: String?
     ) {
-        if (connectionType == "BLUETOOTH") {
-            printViaBluetooth { outputStream ->
-                if (openDrawer && openDrawerOnPrint) {
-                    outputStream.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
-                }
-
-                val lineChars = if (paperSize == 58) 30 else 40
-                val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
-                val dateStr = sdf.format(Date(sale.timestamp))
-                
-                val content = buildTicketContentCommon(sale, items, comment, walletBalance, config, lineChars, dateStr, branchName)
-                
-                outputStream.write(content.toByteArray(Charsets.ISO_8859_1))
-                outputStream.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A))
-
-                if (autoCut) {
-                    outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))
-                }
+        val action: (OutputStream) -> Unit = { outputStream ->
+            if (openDrawer && openDrawerOnPrint) {
+                outputStream.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
             }
+
+            val lineChars = if (paperSize == 58) 30 else 40
+            val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+            val dateStr = sdf.format(Date(sale.timestamp))
+            
+            val content = buildTicketContentCommon(sale, items, comment, walletBalance, config, lineChars, dateStr, branchName)
+            
+            outputStream.write(content.toByteArray(Charsets.ISO_8859_1))
+            outputStream.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A))
+
+            if (autoCut) {
+                outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))
+            }
+        }
+
+        if (connectionType == "BLUETOOTH") {
+            printViaBluetooth(action)
+        } else if (connectionType == "NETWORK") {
+            printViaNetwork(action)
         }
     }
 
@@ -77,76 +81,84 @@ class AndroidPrinterManager : PrinterManager {
         config: TicketConfig?,
         branchName: String?
     ) {
-        if (connectionType == "BLUETOOTH") {
-            printViaBluetooth { outputStream ->
-                if (openDrawerOnPrint) {
-                    outputStream.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
-                }
-
-                val lineChars = if (paperSize == 58) 30 else 40
-                val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
-                val dateStr = sdf.format(Date())
-                
-                val divider = "-".repeat(lineChars)
-                val sb = StringBuilder()
-                sb.append("\n")
-                sb.append(alignText(branchName ?: "PLAZITA POS", lineChars, TicketAlignment.CENTER) + "\n")
-                sb.append(divider + "\n")
-                sb.append(alignText("COMPROBANTE DE ABONO", lineChars, TicketAlignment.CENTER) + "\n")
-                sb.append(divider + "\n")
-                sb.append("FECHA:   $dateStr\n")
-                sb.append("CLIENTE: ${customer.name}\n")
-                sb.append(divider + "\n")
-                
-                val prevDebtLabel = "SALDO ANTERIOR:"
-                val prevDebtVal = "$${(remainingDebt + amountPaid).formatPrice()}"
-                sb.append(prevDebtLabel.padEnd(lineChars - prevDebtVal.length) + prevDebtVal + "\n")
-                
-                val paidLabel = "MONTO ABONADO:"
-                val paidVal = "$${amountPaid.formatPrice()}"
-                sb.append(paidLabel.padEnd(lineChars - paidVal.length) + paidVal + "\n")
-                
-                sb.append(divider + "\n")
-                
-                val newDebtLabel = "NUEVO SALDO:"
-                val newDebtVal = "$${remainingDebt.formatPrice()}"
-                sb.append(newDebtLabel.padEnd(lineChars - newDebtVal.length) + newDebtVal + "\n")
-                
-                sb.append(divider + "\n")
-                sb.append("\n" + alignText("GRACIAS POR SU PAGO", lineChars, TicketAlignment.CENTER) + "\n\n\n\n")
-
-                outputStream.write(sb.toString().toByteArray(Charsets.ISO_8859_1))
-
-                if (autoCut) {
-                    outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))
-                }
+        val action: (OutputStream) -> Unit = { outputStream ->
+            if (openDrawerOnPrint) {
+                outputStream.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
             }
+
+            val lineChars = if (paperSize == 58) 30 else 40
+            val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+            val dateStr = sdf.format(Date())
+            
+            val divider = "-".repeat(lineChars)
+            val sb = StringBuilder()
+            sb.append("\n")
+            sb.append(alignText(branchName ?: "PLAZITA POS", lineChars, TicketAlignment.CENTER) + "\n")
+            sb.append(divider + "\n")
+            sb.append(alignText("COMPROBANTE DE ABONO", lineChars, TicketAlignment.CENTER) + "\n")
+            sb.append(divider + "\n")
+            sb.append("FECHA:   $dateStr\n")
+            sb.append("CLIENTE: ${customer.name}\n")
+            sb.append(divider + "\n")
+            
+            val prevDebtLabel = "SALDO ANTERIOR:"
+            val prevDebtVal = "$${(remainingDebt + amountPaid).formatPrice()}"
+            sb.append(prevDebtLabel.padEnd(lineChars - prevDebtVal.length) + prevDebtVal + "\n")
+            
+            val paidLabel = "MONTO ABONADO:"
+            val paidVal = "$${amountPaid.formatPrice()}"
+            sb.append(paidLabel.padEnd(lineChars - paidVal.length) + paidVal + "\n")
+            
+            sb.append(divider + "\n")
+            
+            val newDebtLabel = "NUEVO SALDO:"
+            val newDebtVal = "$${remainingDebt.formatPrice()}"
+            sb.append(newDebtLabel.padEnd(lineChars - newDebtVal.length) + newDebtVal + "\n")
+            
+            sb.append(divider + "\n")
+            sb.append("\n" + alignText("GRACIAS POR SU PAGO", lineChars, TicketAlignment.CENTER) + "\n\n\n\n")
+
+            outputStream.write(sb.toString().toByteArray(Charsets.ISO_8859_1))
+
+            if (autoCut) {
+                outputStream.write(byteArrayOf(0x1D, 0x56, 0x00))
+            }
+        }
+
+        if (connectionType == "BLUETOOTH") {
+            printViaBluetooth(action)
+        } else if (connectionType == "NETWORK") {
+            printViaNetwork(action)
         }
     }
 
     override fun printMemberCard(customer: Customer) {
+        val action: (OutputStream) -> Unit = { outputStream ->
+            val sb = StringBuilder()
+            sb.append("\n\n")
+            sb.append("   TARJETA DEL CLIENTE\n")
+            sb.append("--------------------------------\n")
+            sb.append("CLIENTE: ${customer.name}\n")
+            sb.append("ID:      ${customer.id}\n")
+            sb.append("\n")
+            
+            val barcodeContent = "CLI-${customer.id}"
+            outputStream.write(byteArrayOf(0x1B, 0x61, 0x01)) 
+            outputStream.write(byteArrayOf(0x1D, 0x68, 0x50)) 
+            val barcodeData = byteArrayOf(0x1D, 0x6B, 0x49, barcodeContent.length.toByte()) + barcodeContent.toByteArray()
+            outputStream.write(barcodeData)
+            
+            sb.append("\n$barcodeContent\n")
+            sb.append("--------------------------------\n")
+            sb.append("\n\n\n\n")
+            outputStream.write(sb.toString().toByteArray(Charsets.US_ASCII))
+            outputStream.write(byteArrayOf(0x1B, 0x61, 0x00))
+        }
+
         if (connectionType == "BLUETOOTH") {
-            printViaBluetooth { outputStream ->
-                val sb = StringBuilder()
-                sb.append("\n\n")
-                sb.append("   TARJETA DEL CLIENTE\n")
-                sb.append("--------------------------------\n")
-                sb.append("CLIENTE: ${customer.name}\n")
-                sb.append("ID:      ${customer.id}\n")
-                sb.append("\n")
-                
-                val barcodeContent = "CLI-${customer.id}"
-                outputStream.write(byteArrayOf(0x1B, 0x61, 0x01)) 
-                outputStream.write(byteArrayOf(0x1D, 0x68, 0x50)) 
-                val barcodeData = byteArrayOf(0x1D, 0x6B, 0x49, barcodeContent.length.toByte()) + barcodeContent.toByteArray()
-                outputStream.write(barcodeData)
-                
-                sb.append("\n$barcodeContent\n")
-                sb.append("--------------------------------\n")
-                sb.append("\n\n\n\n")
-                outputStream.write(sb.toString().toByteArray(Charsets.US_ASCII))
-                outputStream.write(byteArrayOf(0x1B, 0x61, 0x00))
-            }
+            printViaBluetooth(action)
+        } else if (connectionType == "NETWORK") {
+            printViaNetwork(action)
         }
     }
 
@@ -184,15 +196,23 @@ class AndroidPrinterManager : PrinterManager {
     }
 
     override fun openDrawer() {
+        val action: (OutputStream) -> Unit = { it.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())) }
         if (connectionType == "BLUETOOTH") {
-            printViaBluetooth { it.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())) }
+            printViaBluetooth(action)
+        } else if (connectionType == "NETWORK") {
+            printViaNetwork(action)
         }
     }
 
     override fun printTestPage() {
-        printViaBluetooth {
+        val action: (OutputStream) -> Unit = {
             val test = "\n\n   PRUEBA DE IMPRESION\n   SISTEMA POS ANDROID\n   CONEXION: OK\n\n\n\n"
             it.write(test.toByteArray(Charsets.US_ASCII))
+        }
+        if (connectionType == "BLUETOOTH") {
+            printViaBluetooth(action)
+        } else if (connectionType == "NETWORK") {
+            printViaNetwork(action)
         }
     }
 
@@ -220,6 +240,28 @@ class AndroidPrinterManager : PrinterManager {
         } catch (e: Exception) {
             println("Error BT: ${e.message}")
         }
+    }
+
+    private fun printViaNetwork(block: (OutputStream) -> Unit) {
+        if (address.isBlank()) return
+        // En Android, las operaciones de red deben ser asíncronas
+        Thread {
+            try {
+                val parts = address.split(":")
+                val ip = parts[0]
+                val port = if (parts.size > 1) parts[1].toInt() else 9100
+                
+                java.net.Socket().use { socket ->
+                    socket.connect(java.net.InetSocketAddress(ip, port), 5000)
+                    val outputStream = socket.getOutputStream()
+                    outputStream.write(byteArrayOf(0x1B, 0x40)) // Reset ESC/POS
+                    block(outputStream)
+                    outputStream.flush()
+                }
+            } catch (e: Exception) {
+                println("Error Network Printer ($address): ${e.message}")
+            }
+        }.start()
     }
 }
 

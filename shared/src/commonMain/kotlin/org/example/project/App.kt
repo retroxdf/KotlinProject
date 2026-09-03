@@ -118,11 +118,17 @@ fun AppContent() {
     val peripheralViewModel = remember { PeripheralViewModel(settingsRepository, printerManager, posTerminalRepository, firebaseManager, mercadoPagoManager, productRepository, "") }
 
     LaunchedEffect(database) {
-        if (settingsRepository.getSetting("db_initial_clear_v4") != "true") {
+        if (settingsRepository.getSetting("db_initial_clear_v5") != "true") {
             try {
+                println("APP: Realizando limpieza de mantenimiento y re-sincronización...")
                 database.clearAllTablesManual()
                 userRepository.initializeAdmin()
-                settingsRepository.saveSetting("db_initial_clear_v4", "true")
+                
+                // Resetear banderas de sincronización para forzar descarga total
+                settingsRepository.saveSetting("is_initial_sync_completed", "false")
+                // Borrar banderas de inventario por sucursal (simplificado reset de settings)
+                
+                settingsRepository.saveSetting("db_initial_clear_v5", "true")
             } catch (e: Exception) {}
         }
     }
@@ -489,8 +495,8 @@ fun UserPanelFullScreen(viewModel: AuthViewModel, onDismiss: () -> Unit) {
                                     Spacer(Modifier.height(12.dp))
                                     Text("JORNADA ASIGNADA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Descanso:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                        Text(stats!!.restDay, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                        Text("Día de descanso:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                        Text(stats!!.restDay, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = if(stats!!.restDay == "No definido") Color.Red else Color.Unspecified)
                                     }
                                 }
                             }
@@ -528,8 +534,8 @@ fun UserPanelFullScreen(viewModel: AuthViewModel, onDismiss: () -> Unit) {
                                     Spacer(Modifier.height(12.dp))
                                     Text("JORNADA ASIGNADA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Descanso:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                        Text(stats!!.restDay, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                        Text("Día de descanso:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                        Text(stats!!.restDay, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = if(stats!!.restDay == "No definido") Color.Red else Color.Unspecified)
                                     }
                                     
                                     Spacer(Modifier.weight(1f))

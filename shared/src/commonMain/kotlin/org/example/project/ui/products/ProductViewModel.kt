@@ -5,6 +5,10 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.abtsplazita.posplazita.data.remote.ProductApiService
+import com.abtsplazita.posplazita.domain.calculatePriceFromUtility
+import com.abtsplazita.posplazita.domain.calculateDefaultPrice1
+import com.abtsplazita.posplazita.domain.calculateDefaultPrice2
+import com.abtsplazita.posplazita.domain.calculateDefaultPrice3
 import com.abtsplazita.posplazita.domain.Product
 import com.abtsplazita.posplazita.domain.User
 import com.abtsplazita.posplazita.domain.StockMovement
@@ -121,7 +125,7 @@ class ProductViewModel(
     }
 
 
-    private val _defaultPriceLevel = MutableStateFlow(3)
+    private val _defaultPriceLevel = MutableStateFlow(2)
     val defaultPriceLevel = _defaultPriceLevel.asStateFlow()
 
     private val _catalogSearchQuery = MutableStateFlow("")
@@ -212,20 +216,21 @@ class ProductViewModel(
         
         var updated = product
         
-        // Auto-calculo de precios si el costo o el IVA cambiaron
+        // Auto-calculo de precios si el costo o el IVA cambiaron según requerimiento
         if ((product.cost != oldCost || product.tax != oldTax) && product.cost > 0) {
             val costBase = product.cost
             val taxRate = product.tax
             val costFinal = costBase * (1 + taxRate / 100)
             
-            // Margen del 30% sobre el costo CON IVA para el precio público (P3)
-            val p3 = (costFinal * 1.30).roundToNearestHalf()
+            val p2 = calculateDefaultPrice2(costFinal)
+            val p1 = calculateDefaultPrice1(costFinal)
+            val p3 = p2 + 0.50
             
             updated = updated.copy(
+                price2 = p2,
+                price1 = p1,
                 price3 = p3,
-                price1 = (p3 * 0.85).roundToNearestHalf(), // Mayoreo: ~15% desc
-                price2 = (p3 * 0.92).roundToNearestHalf(), // Especial: ~8% desc
-                price4 = (p3 * 1.10).roundToNearestHalf()  // Reserva: +10%
+                price4 = 0.0
             )
         }
         
@@ -237,9 +242,6 @@ class ProductViewModel(
         }
     }
 
-    private fun Double.roundToNearestHalf(): Double {
-        return (this * 2).toInt() / 2.0
-    }
 
     fun updateEditingStock(stock: Double) {
         _editingStock.value = stock

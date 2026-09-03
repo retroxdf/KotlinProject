@@ -40,7 +40,10 @@ data class TerminalBalance(
 data class PriceAdjustment(
     val productId: String,
     val newCost: Double,
-    val newPrice3: Double
+    val newPrice1: Double,
+    val newPrice2: Double,
+    val newPrice3: Double,
+    val newPrice4: Double
 )
 
 data class InventoryReportItem(
@@ -137,6 +140,10 @@ class HistoryViewModel(
             flowOf(emptyList())
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val hasPendingPurchases = purchases.map { list ->
+        list.any { it.status == PurchaseStatus.PENDING_PRICE_UPDATE }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val movements = _selectedBranchId.flatMapLatest { bId ->
         if (cashMovementRepository != null) {
@@ -409,20 +416,15 @@ class HistoryViewModel(
                 adjustments.forEach { adj ->
                     val product = productRepository?.getProductById(adj.productId)
                     if (product != null) {
-                        val newCost = adj.newCost
-                        val newP3 = adj.newPrice3
-                        
-                        // Utilizar la misma lógica de redondeo que en ProductViewModel
-                        fun Double.roundToHalf() = (this * 2).toInt() / 2.0
-                        
                         val updatedProduct = product.copy(
-                            cost = newCost,
-                            price3 = newP3,
-                            price1 = (newP3 * 0.85).roundToHalf(),
-                            price2 = (newP3 * 0.92).roundToHalf(),
-                            price4 = (newP3 * 1.10).roundToHalf()
+                            cost = adj.newCost,
+                            price1 = adj.newPrice1,
+                            price2 = adj.newPrice2,
+                            price3 = adj.newPrice3,
+                            price4 = adj.newPrice4,
+                            lastUpdated = com.abtsplazita.posplazita.currentTimeMillis()
                         )
-                        productRepository.saveProduct(updatedProduct)
+                        productRepository.saveProduct(updatedProduct, syncWithCloud = true)
                     }
                 }
                 purchaseRepository?.updatePurchaseStatus(purchase, PurchaseStatus.COMPLETED)

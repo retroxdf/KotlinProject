@@ -21,7 +21,20 @@ class InventoryViewModel(
     val branches = _branches.asStateFlow()
 
     private val _inventoryData = MutableStateFlow<List<ProductInventory>>(emptyList())
-    val inventoryData = _inventoryData.asStateFlow()
+    val inventoryData: StateFlow<List<ProductInventory>> = combine(
+        _inventoryData,
+        repository.getAllInventory(),
+        branchRepository.getAllBranches()
+    ) { currentData: List<ProductInventory>, inventory: List<Inventory>, allBranches: List<Branch> ->
+        if (currentData.isEmpty()) return@combine emptyList<ProductInventory>()
+        currentData.map { item ->
+            val stocks = mutableMapOf<String, Double>()
+            allBranches.forEach { b ->
+                stocks[b.id] = inventory.find { it.productId == item.product.id && it.branchId == b.id }?.stock ?: 0.0
+            }
+            item.copy(branchStocks = stocks)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
@@ -136,10 +149,10 @@ class InventoryViewModel(
                 id = "P${com.abtsplazita.posplazita.currentTimeMillis()}",
                 name = name,
                 barcode = barcode,
-                price3 = price,
-                price1 = price * 0.8,
-                price2 = price * 0.9,
-                price4 = price * 1.1,
+                price2 = price, // Default Público
+                price1 = price * 0.9, // Sugerencia Mayoreo
+                price3 = price + 0.50, // Adicional
+                price4 = 0.0,
                 unit = UnitType.PIECE,
                 imagePath = imagePath
             )

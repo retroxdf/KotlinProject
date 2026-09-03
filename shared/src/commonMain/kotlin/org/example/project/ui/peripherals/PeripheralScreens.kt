@@ -531,11 +531,12 @@ fun ProductSettingsSubMenu(viewModel: PeripheralViewModel, repository: ProductRe
     SubMenuLayout(title = "Configuración de Productos", onBack = onBack) {
         Text("Nivel de Precio por Defecto", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            (1..4).forEach { level ->
+            val levels = listOf(1 to "P1 (Mayoreo)", 2 to "P2 (Público)", 3 to "P3 (Adicional)")
+            levels.forEach { (level, label) ->
                 FilterChip(
                     selected = defaultPriceLevel == level,
                     onClick = { viewModel.setDefaultPriceLevel(level) },
-                    label = { Text("P$level") },
+                    label = { Text(label) },
                     modifier = Modifier.weight(1f)
                 )
             }

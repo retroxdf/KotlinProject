@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -24,6 +25,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import com.abtsplazita.posplazita.domain.Supplier
+import com.abtsplazita.posplazita.domain.PurchaseStatus
 import com.abtsplazita.posplazita.domain.formatPrice
 import kotlinx.datetime.*
 import androidx.compose.ui.text.input.TextFieldValue
@@ -263,6 +265,8 @@ fun SupplierDetailView(
             Spacer(Modifier.height(8.dp))
             
             creditPurchases.forEach { purchase ->
+                val isPendingPrices = purchase.status == PurchaseStatus.PENDING_PRICE_UPDATE
+                
                 val limitDate = if (supplier.creditDays > 0) {
                     val daysMillis = supplier.creditDays.toLong() * 24 * 60 * 60 * 1000L
                     val limitMillis = purchase.timestamp + daysMillis
@@ -272,16 +276,27 @@ fun SupplierDetailView(
 
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isPendingPrices) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    border = if (isPendingPrices) BorderStroke(2.dp, Color.Red) else null
                 ) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Compra #${purchase.id}", fontWeight = FontWeight.Bold)
-                            Text("Total: $${purchase.total.formatPrice()}", color = MaterialTheme.colorScheme.primary)
+                            Text("Compra #${purchase.id}", fontWeight = FontWeight.Bold, color = if(isPendingPrices) Color.Red else Color.Unspecified)
+                            Text("Total: $${purchase.total.formatPrice()}", color = if(isPendingPrices) Color.Red else MaterialTheme.colorScheme.primary)
                         }
-                        Column(modifier = Modifier.weight(1.5f), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Límite de pago:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                            Text(limitDate, fontWeight = FontWeight.Bold, color = if (limitDate != "N/A") Color.Red else Color.Gray)
+                        if (isPendingPrices) {
+                            Column(modifier = Modifier.weight(1.5f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Surface(color = Color.Red, shape = RoundedCornerShape(4.dp)) {
+                                    Text("REVISAR PRECIOS", color = Color.White, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp))
+                                }
+                            }
+                        } else {
+                            Column(modifier = Modifier.weight(1.5f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Límite de pago:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                Text(limitDate, fontWeight = FontWeight.Bold, color = if (limitDate != "N/A") Color.Red else Color.Gray)
+                            }
                         }
                         Button(
                             onClick = {

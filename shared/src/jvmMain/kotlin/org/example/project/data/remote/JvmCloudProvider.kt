@@ -34,9 +34,9 @@ class JvmCloudProvider : CloudProvider {
     private var idToken: String? = null
 
     // --- INTERVALOS DE TIEMPO ---
-    private val PULSE_FAST = 300000L // 5 min (antes 2 min)
-    private val PULSE_NORMAL = 900000L // 15 min (antes 10 min)
-    private val PULSE_SLOW = 1800000L // 30 min
+    private val PULSE_FAST = 30000L // 30 segundos para Inventario y Pedidos
+    private val PULSE_NORMAL = 120000L // 2 minutos para el resto
+    private val PULSE_SLOW = 600000L // 10 minutos
 
     init {
         authenticateAnonymously()

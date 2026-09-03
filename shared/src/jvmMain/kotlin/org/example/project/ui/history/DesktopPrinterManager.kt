@@ -45,7 +45,7 @@ class DesktopPrinterManager : PrinterManager {
         config: TicketConfig?,
         branchName: String?
     ) {
-        if (connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
+        if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
             sendEscPos { outputStream ->
                 // Abrir Cajón
                 if (openDrawer && openDrawerOnPrint) {
@@ -119,7 +119,7 @@ class DesktopPrinterManager : PrinterManager {
         config: TicketConfig?,
         branchName: String?
     ) {
-        if (connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
+        if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
             sendEscPos { outputStream ->
                 if (openDrawerOnPrint) {
                     outputStream.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
@@ -169,7 +169,7 @@ class DesktopPrinterManager : PrinterManager {
     }
 
     override fun printMemberCard(customer: Customer) {
-        if (connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
+        if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
             sendEscPos { outputStream ->
                 val sb = StringBuilder()
                 sb.append("\n\n")
@@ -242,7 +242,7 @@ class DesktopPrinterManager : PrinterManager {
     }
 
     override fun openDrawer() {
-        if (connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
+        if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
             sendEscPos { it.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())) }
         } else {
             println("Desktop: Abriendo cajón en $printerName")
@@ -250,7 +250,7 @@ class DesktopPrinterManager : PrinterManager {
     }
 
     override fun printTestPage() {
-        if (connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
+        if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
             sendEscPos {
                 val test = "\n\n   PRUEBA DE IMPRESION\n   SISTEMA POS DESKTOP\n   CONEXION: OK\n\n\n\n"
                 it.write(test.toByteArray(Charsets.US_ASCII))
@@ -279,20 +279,34 @@ class DesktopPrinterManager : PrinterManager {
     private fun sendEscPos(block: (OutputStream) -> Unit) {
         if (address.isBlank()) return
         try {
-            val comPort = SerialPort.getCommPort(address)
-            comPort.baudRate = 9600
-            comPort.setComPortTimeouts(SerialPort.TIMEOUT_WRITE_BLOCKING, 0, 0)
-            if (comPort.openPort()) {
-                val outputStream = comPort.outputStream
-                outputStream.write(byteArrayOf(0x1B, 0x40)) // Reset
-                block(outputStream)
-                outputStream.flush()
-                comPort.closePort()
+            if (connectionType == "NETWORK") {
+                val parts = address.split(":")
+                val ip = parts[0]
+                val port = if (parts.size > 1) parts[1].toInt() else 9100
+                
+                java.net.Socket().use { socket ->
+                    socket.connect(java.net.InetSocketAddress(ip, port), 5000)
+                    val outputStream = socket.getOutputStream()
+                    outputStream.write(byteArrayOf(0x1B, 0x40)) // Reset
+                    block(outputStream)
+                    outputStream.flush()
+                }
             } else {
-                println("Desktop: No se pudo abrir el puerto $address")
+                val comPort = SerialPort.getCommPort(address)
+                comPort.baudRate = 9600
+                comPort.setComPortTimeouts(SerialPort.TIMEOUT_WRITE_BLOCKING, 0, 0)
+                if (comPort.openPort()) {
+                    val outputStream = comPort.outputStream
+                    outputStream.write(byteArrayOf(0x1B, 0x40)) // Reset
+                    block(outputStream)
+                    outputStream.flush()
+                    comPort.closePort()
+                } else {
+                    println("Desktop: No se pudo abrir el puerto $address")
+                }
             }
         } catch (e: Exception) {
-            println("Desktop: Error en comunicación serial: ${e.message}")
+            println("Desktop: Error en comunicación ($connectionType - $address): ${e.message}")
         }
     }
 }

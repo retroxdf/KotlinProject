@@ -2,6 +2,7 @@ package com.abtsplazita.posplazita.ui.history
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,6 +11,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
@@ -32,15 +34,23 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.abtsplazita.posplazita.domain.formatPrice
+import com.abtsplazita.posplazita.domain.calculatePriceFromUtility
+import com.abtsplazita.posplazita.domain.calculateDefaultPrice1
+import com.abtsplazita.posplazita.domain.calculateDefaultPrice2
+import com.abtsplazita.posplazita.domain.calculateDefaultPrice3
+import com.abtsplazita.posplazita.domain.calculateUtility
 import com.abtsplazita.posplazita.domain.Sale
 import com.abtsplazita.posplazita.domain.SaleItem
 import com.abtsplazita.posplazita.domain.Product
 import com.abtsplazita.posplazita.domain.CashMovementType
 import com.abtsplazita.posplazita.domain.Purchase
 import com.abtsplazita.posplazita.domain.PurchaseItem
+import com.abtsplazita.posplazita.domain.PurchaseStatus
 import com.abtsplazita.posplazita.domain.CashOut
 import com.abtsplazita.posplazita.domain.PreCut
 import com.abtsplazita.posplazita.formatTimestamp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.datetime.*
 
 @Composable
@@ -104,6 +114,7 @@ fun ConsultasDashboard(
     val terminalBalances by viewModel.terminalBalances.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val selectedBranchId by viewModel.selectedBranchId.collectAsState()
+    val hasPendingPurchases by viewModel.hasPendingPurchases.collectAsState()
 
     LaunchedEffect(selectedBranchId) {
         viewModel.refreshDashboardData()
@@ -156,7 +167,7 @@ fun ConsultasDashboard(
             
             val menuItems = listOf(
                 MenuData("Ventas", "Tickets y detalles", Icons.AutoMirrored.Filled.ReceiptLong, Color(0xFF2196F3), onNavigateToSales),
-                MenuData("Compras", "Entradas de almacén", Icons.Default.ShoppingCart, Color(0xFFFF9800), onNavigateToPurchases),
+                MenuData("Compras", "Entradas de almacén", Icons.Default.ShoppingCart, if(hasPendingPurchases) Color.Red else Color(0xFFFF9800), onNavigateToPurchases),
                 MenuData("Inventario", "Costos y existencias", Icons.Default.Inventory, Color(0xFF673AB7), onNavigateToInventoryReport),
                 MenuData("Cortes", "Cierres y arqueos", Icons.Default.Assessment, Color(0xFF4CAF50), onNavigateToCashOuts),
                 MenuData("Precortes", "Validaciones rápidas", Icons.AutoMirrored.Filled.FactCheck, Color(0xFF2196F3), onNavigateToPreCuts),
@@ -350,6 +361,8 @@ fun SalesHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
 @Composable
 fun PurchasesHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
     val purchases by viewModel.purchases.collectAsState()
+    val selectedPurchase by viewModel.selectedPurchase.collectAsState()
+    
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
@@ -357,12 +370,332 @@ fun PurchasesHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
             items(purchases) { p ->
-                ListItem(
-                    headlineContent = { Text("COMPRA: ${p.id}", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text(formatTimestamp(p.timestamp)) },
-                    trailingContent = { Text("$${p.total.formatPrice()}", fontWeight = FontWeight.Black) }
-                )
-                HorizontalDivider()
+                val isPending = p.status == PurchaseStatus.PENDING_PRICE_UPDATE
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { viewModel.selectPurchase(p) },
+                    border = if (isPending) BorderStroke(2.dp, Color.Red) else null,
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isPending) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    ListItem(
+                        headlineContent = { 
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("COMPRA: ${p.id}", fontWeight = FontWeight.Bold, color = if(isPending) Color.Red else Color.Unspecified)
+                                if (isPending) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Surface(color = Color.Red, shape = RoundedCornerShape(4.dp)) {
+                                        Text("REVISAR PRECIOS", color = Color.White, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 4.dp))
+                                    }
+                                }
+                            }
+                        },
+                        supportingContent = { Text(formatTimestamp(p.timestamp)) },
+                        trailingContent = { Text("$${p.total.formatPrice()}", fontWeight = FontWeight.Black, color = if(isPending) Color.Red else Color.Unspecified) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                    )
+                }
+            }
+        }
+    }
+
+    if (selectedPurchase != null) {
+        PurchasePriceAdjustmentDialog(
+            purchase = selectedPurchase!!,
+            viewModel = viewModel,
+            onDismiss = { viewModel.clearSelection() }
+        )
+    }
+}
+
+@Composable
+fun PurchasePriceAdjustmentDialog(purchase: Purchase, viewModel: HistoryViewModel, onDismiss: () -> Unit) {
+    val items by viewModel.selectedPurchaseItems.collectAsState()
+    val products by viewModel.currentPurchaseProducts.collectAsState()
+    
+    // Mapa para rastrear cambios locales de TODA la compra
+    val adjustments = remember(items) { mutableStateMapOf<String, PriceAdjustment>() }
+
+    // Inicializar o actualizar ajustes cuando los productos se carguen
+    LaunchedEffect(items, products) {
+        if (items.isNotEmpty() && products.isNotEmpty()) {
+            items.forEach { item ->
+                if (!adjustments.containsKey(item.productId)) {
+                    val cost = item.costAtPurchase
+                    
+                    // Cálculos sugeridos según reglas de negocio
+                    val p2 = calculateDefaultPrice2(cost)
+                    val p1 = calculateDefaultPrice1(cost)
+                    val p3 = p2 + 0.50
+                    
+                    adjustments[item.productId] = PriceAdjustment(
+                        productId = item.productId,
+                        newCost = cost,
+                        newPrice1 = p1,
+                        newPrice2 = p2,
+                        newPrice3 = p3,
+                        newPrice4 = 0.0
+                    )
+                }
+            }
+        }
+    }
+
+    // Estado para el producto que se está editando en detalle
+    var editingProductItem by remember { mutableStateOf<Pair<PurchaseItem, Product?>?>(null) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color(0xFFF0F2F5)
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header (Estilo Imagen 1/2)
+                Surface(color = Color(0xFF0056A0), contentColor = Color.White) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Color.White) }
+                        Spacer(Modifier.width(8.dp))
+                        Text("Revisión de Precios de Compra #${purchase.id}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Tabla de productos (Estilo Imagen 1)
+                Column(modifier = Modifier.weight(1f).padding(16.dp)) {
+                    // Encabezados
+                    Surface(color = Color.White, shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp), border = BorderStroke(1.dp, Color.LightGray)) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(Modifier.width(40.dp))
+                            Text("Producto", modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                            Text("Costo", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Color.Gray, textAlign = TextAlign.Center)
+                            Text("Costo prom. / ant.", modifier = Modifier.weight(1.2f), style = MaterialTheme.typography.labelMedium, color = Color.Gray, textAlign = TextAlign.Center)
+                            Text("Utilidad / ant.", modifier = Modifier.weight(1.2f), style = MaterialTheme.typography.labelMedium, color = Color.Gray, textAlign = TextAlign.Center)
+                            Text("Precio de venta", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Color.Gray, textAlign = TextAlign.Center)
+                            Spacer(Modifier.width(48.dp))
+                        }
+                    }
+
+                    if (items.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    } else {
+                        LazyColumn(modifier = Modifier.weight(1f).background(Color.White).border(1.dp, Color.LightGray)) {
+                            items(items) { item ->
+                                val product = products[item.productId]
+                                val adj = adjustments[item.productId]
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().clickable { editingProductItem = item to product }.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.CheckBoxOutlineBlank, null, tint = Color.LightGray, modifier = Modifier.size(24.dp).padding(start = 8.dp))
+                                    Spacer(Modifier.width(16.dp))
+                                    
+                                    // Info Producto
+                                    Row(modifier = Modifier.weight(1.5f), verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(modifier = Modifier.size(40.dp), shape = RoundedCornerShape(4.dp), color = Color(0xFFF5F5F5)) {
+                                            Icon(Icons.Default.Image, null, tint = Color.LightGray, modifier = Modifier.padding(8.dp))
+                                        }
+                                        Spacer(Modifier.width(12.dp))
+                                        Column {
+                                            Text(product?.barcode ?: "---", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                            Text(item.productName, fontWeight = FontWeight.Bold, maxLines = 1)
+                                        }
+                                    }
+
+                                    // Costo de esta compra
+                                    Text("$${item.costAtPurchase.formatPrice()}", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+
+                                    // Costo Promedio
+                                    Column(modifier = Modifier.weight(1.2f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("$${(adj?.newCost ?: item.costAtPurchase).formatPrice()}", fontWeight = FontWeight.Bold)
+                                        Text("$${(product?.cost ?: 0.0).formatPrice()}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                    }
+
+                                    // Utilidad
+                                    val currentPrice2 = adj?.newPrice2 ?: product?.price2 ?: 0.0
+                                    val currentCost = adj?.newCost ?: item.costAtPurchase
+                                    val utility = calculateUtility(currentCost, currentPrice2)
+                                    val oldPrice2 = product?.price2 ?: 0.0
+                                    val oldUtility = calculateUtility(product?.cost ?: 0.0, oldPrice2)
+                                    
+                                    Column(modifier = Modifier.weight(1.2f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("${utility.formatPrice()}%", fontWeight = FontWeight.Bold)
+                                        Text("${oldUtility.formatPrice()}%", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                    }
+
+                                    // Precio
+                                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("$${currentPrice2.formatPrice()}", fontWeight = FontWeight.Black)
+                                        Text("1 de 3", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                    }
+
+                                    IconButton(onClick = { editingProductItem = item to product }) {
+                                        Icon(Icons.Default.SettingsBackupRestore, null, tint = Color(0xFF0056A0))
+                                    }
+                                }
+                                HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
+                            }
+                        }
+                    }
+                }
+
+                // Footer Aceptar
+                Button(
+                    onClick = { 
+                        viewModel.adjustProductPrices(purchase, adjustments.values.toList())
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                ) {
+                    Text("ACEPTAR", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                }
+            }
+        }
+    }
+
+    // DIALOGO DETALLADO (Estilo Imagen 2)
+    if (editingProductItem != null) {
+        val (item, product) = editingProductItem!!
+        val adj = adjustments[item.productId] ?: PriceAdjustment(item.productId, item.costAtPurchase, 0.0, 0.0, 0.0, 0.0)
+
+        Dialog(
+            onDismissRequest = { editingProductItem = null }
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(0.95f).fillMaxHeight(0.9f),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Header Azul
+                    Surface(color = Color(0xFF0056A0), contentColor = Color.White) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { editingProductItem = null }) { Icon(Icons.Default.Close, null, tint = Color.White) }
+                            Spacer(Modifier.width(16.dp))
+                            Text("Producto", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState())) {
+                        // Info Superior
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(modifier = Modifier.size(100.dp), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color.LightGray)) {
+                                Icon(Icons.Default.Image, null, tint = Color.LightGray, modifier = Modifier.padding(24.dp))
+                            }
+                            Spacer(Modifier.width(20.dp))
+                            Column {
+                                Text(product?.barcode ?: "---", color = Color.Gray)
+                                Text(item.productName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                                Text("Impuestos", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+                                Text("Costo promedio anterior: $${(product?.cost ?: 0.0).formatPrice()}", color = Color.Gray)
+                                Text("Costo promedio: $${adj.newCost.formatPrice()}", color = Color.Gray)
+                            }
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+
+                        // Tabla de Precios
+                        Surface(border = BorderStroke(1.dp, Color.LightGray), shape = RoundedCornerShape(8.dp)) {
+                            Column {
+                                // Header Tabla
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().background(Color(0xFFF8F9FA)).padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.CheckBoxOutlineBlank, null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Text("No.", modifier = Modifier.width(30.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                    Text("Mayoreo", modifier = Modifier.width(60.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Text("Desc.", modifier = Modifier.width(60.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Text("Util. Ant.", modifier = Modifier.weight(1.3f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Text("Utilidad", modifier = Modifier.weight(1.3f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Text("Precio Ant.", modifier = Modifier.width(85.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Text("Precio", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Spacer(Modifier.width(40.dp))
+                                }
+
+                                val prices = listOf(
+                                    Triple(1, adj.newPrice1, product?.price1 ?: 0.0),
+                                    Triple(2, adj.newPrice2, product?.price2 ?: 0.0),
+                                    Triple(3, adj.newPrice3, product?.price3 ?: 0.0)
+                                )
+
+                                prices.forEach { (no, currentP, oldP) ->
+                                    val util = calculateUtility(adj.newCost, currentP)
+                                    val oldUtil = calculateUtility(product?.cost ?: 0.0, oldP)
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.CheckBoxOutlineBlank, null, tint = Color.LightGray, modifier = Modifier.size(20.dp))
+                                        Spacer(Modifier.width(12.dp))
+                                        Text("$no", modifier = Modifier.width(30.dp), fontWeight = FontWeight.Bold)
+                                        Text("0", modifier = Modifier.width(60.dp), color = Color.Gray, textAlign = TextAlign.Center)
+                                        Text("--", modifier = Modifier.width(60.dp), color = Color.Gray, textAlign = TextAlign.Center)
+                                        Text("${oldUtil.formatPrice()}%", modifier = Modifier.weight(1.3f), color = Color.Gray, textAlign = TextAlign.Center, maxLines = 1)
+                                        Text("${util.formatPrice()}%", modifier = Modifier.weight(1.3f), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = if(util >= oldUtil) Color(0xFF2E7D32) else Color.Red, maxLines = 1)
+                                        Text("$${oldP.formatPrice()}", modifier = Modifier.width(85.dp), color = Color.Gray, textAlign = TextAlign.Center)
+                                        
+                                        // Campo de Precio editable resaltado en azul
+                                        OutlinedTextField(
+                                            value = currentP.toString(),
+                                            onValueChange = { 
+                                                val newVal = it.toDoubleOrNull() ?: 0.0
+                                                val newAdj = when(no) {
+                                                    1 -> adj.copy(newPrice1 = newVal)
+                                                    2 -> adj.copy(newPrice2 = newVal)
+                                                    3 -> adj.copy(newPrice3 = newVal)
+                                                    else -> adj.copy(newPrice4 = newVal)
+                                                }
+                                                adjustments[item.productId] = newAdj
+                                            },
+                                            modifier = Modifier.width(110.dp).height(48.dp),
+                                            prefix = { Text("$", style = MaterialTheme.typography.bodySmall) },
+                                            textStyle = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Black, textAlign = TextAlign.Center),
+                                            singleLine = true,
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedContainerColor = Color(0xFFE3F2FD),
+                                                unfocusedContainerColor = Color(0xFFF0F7FF),
+                                                focusedBorderColor = Color(0xFF2196F3),
+                                                unfocusedBorderColor = Color(0xFFBBDEFB)
+                                            ),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                        )
+
+                                        IconButton(onClick = { 
+                                            // Restaurar al precio anterior
+                                            val newAdj = when(no) {
+                                                1 -> adj.copy(newPrice1 = oldP)
+                                                2 -> adj.copy(newPrice2 = oldP)
+                                                3 -> adj.copy(newPrice3 = oldP)
+                                                else -> adj.copy(newPrice4 = oldP)
+                                            }
+                                            adjustments[item.productId] = newAdj
+                                        }, modifier = Modifier.size(40.dp)) {
+                                            Icon(Icons.Default.History, null, tint = Color(0xFF0056A0), modifier = Modifier.size(20.dp))
+                                        }
+                                    }
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+                        Button(
+                            onClick = { editingProductItem = null },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0056A0))
+                        ) {
+                            Text("ACEPTAR", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
     }

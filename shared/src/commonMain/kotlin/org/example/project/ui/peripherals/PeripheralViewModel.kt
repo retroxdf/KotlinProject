@@ -58,7 +58,7 @@ class PeripheralViewModel(
     private val _allowNegativeStock = MutableStateFlow(false)
     val allowNegativeStock = _allowNegativeStock.asStateFlow()
 
-    private val _defaultPriceLevel = MutableStateFlow(3) // Por defecto P3
+    private val _defaultPriceLevel = MutableStateFlow(2) // Por defecto P2 (Público)
     val defaultPriceLevel = _defaultPriceLevel.asStateFlow()
 
     // --- Nuevas Preferencias de Operatividad ---
@@ -145,7 +145,7 @@ class PeripheralViewModel(
                 // Las preferencias de venta ahora son por sucursal
                 settings["${branchId}_show_cash_out_total"]?.let { _showCashOutTotal.value = it.toBoolean() }
                 settings["${branchId}_allow_negative_stock"]?.let { _allowNegativeStock.value = it.toBoolean() }
-                settings["${branchId}_default_price_level"]?.let { _defaultPriceLevel.value = it.toIntOrNull() ?: 3 }
+                settings["${branchId}_default_price_level"]?.let { _defaultPriceLevel.value = it.toIntOrNull() ?: 2 }
                 settings["${branchId}_ask_qty_add"]?.let { _askQuantityOnAdd.value = it.toBoolean() }
                 settings["${branchId}_add_at_top"]?.let { _addAtTop.value = it.toBoolean() }
                 settings["${branchId}_wholesale_enabled"]?.let { _isWholesaleEnabled.value = it.toBoolean() }
