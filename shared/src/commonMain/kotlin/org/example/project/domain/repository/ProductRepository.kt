@@ -75,42 +75,57 @@ class ProductRepository(
         val trimmedQuery = query.trim()
         if (trimmedQuery.isEmpty()) return flowOf(emptyList())
 
-        // Si la búsqueda tiene espacios, aplicamos búsqueda por fragmentos (Ej: "sop mar pi")
-        if (trimmedQuery.contains(" ")) {
-            val fragments = trimmedQuery.lowercase().split(" ").filter { it.isNotBlank() }
-            
-            return productDao.getAllProducts().map { entities ->
-                entities.map { it.toDomain() }
-                    .filter { product ->
-                        val searchArea = "${product.name} ${product.barcode} ${product.barcode2 ?: ""} ${product.barcode3 ?: ""} ${product.barcode4 ?: ""}".lowercase()
-                        fragments.all { fragment -> searchArea.contains(fragment) }
-                    }
-                    .sortedByDescending { product ->
-                        // Sistema de puntuación simple:
-                        var score = 0
-                        val nameLow = product.name.lowercase()
-                        
-                        // 1. Si el nombre empieza exactamente con el primer fragmento (Peso máximo)
-                        if (nameLow.startsWith(fragments[0])) score += 100
-                        
-                        // 2. Si contiene los fragmentos en el orden exacto
-                        if (nameLow.contains(trimmedQuery.lowercase())) score += 50
-                        
-                        // 3. Por cada fragmento que sea una palabra completa
-                        fragments.forEach { f ->
-                            if (nameLow.split(" ").contains(f)) score += 10
-                        }
-                        
-                        score
-                    }
-                    .drop(offset)
-                    .take(limit)
-            }
-        }
+        // Normalizamos la consulta (minúsculas y sin acentos)
+        val normalizedQuery = trimmedQuery.normalizeForSearch()
+        val fragments = normalizedQuery.split(" ").filter { it.isNotBlank() }
 
-        // Búsqueda estándar (un solo término o código de barras)
-        return productDao.searchProductsPaginated(trimmedQuery, limit, offset).map { entities ->
+        // Búsqueda híbrida: Cargamos productos y filtramos con normalización para soportar acentos
+        return productDao.getAllProducts().map { entities ->
             entities.map { it.toDomain() }
+                .filter { product ->
+                    val searchArea = "${product.name} ${product.barcode} ${product.barcode2 ?: ""} ${product.barcode3 ?: ""} ${product.barcode4 ?: ""}".normalizeForSearch()
+                    // Debe contener todos los fragmentos de la búsqueda
+                    fragments.all { fragment -> searchArea.contains(fragment) }
+                }
+                .sortedByDescending { product ->
+                    // SISTEMA DE PUNTUACIÓN DE RELEVANCIA
+                    var score = 0
+                    val nameNorm = product.name.normalizeForSearch()
+                    val barcode = product.barcode.lowercase()
+                    
+                    // 1. Coincidencia exacta con código de barras (Prioridad Máxima)
+                    if (barcode == normalizedQuery) score += 1000
+                    
+                    // 2. Empieza exactamente con la consulta completa
+                    if (nameNorm.startsWith(normalizedQuery)) score += 500
+                    
+                    // 3. Contiene todos los fragmentos EN ORDEN (ej: "coc 355" en "Coca Cola 355ml")
+                    var lastIndex = -1
+                    val inOrder = fragments.all { f ->
+                        val index = nameNorm.indexOf(f, lastIndex + 1)
+                        if (index != -1) {
+                            lastIndex = index
+                            true
+                        } else false
+                    }
+                    if (inOrder) score += 300
+
+                    // 4. Empieza con el primer fragmento (ej: "coc" -> "coca")
+                    if (nameNorm.startsWith(fragments[0])) score += 200
+                    
+                    // 5. Bonus por cada fragmento que sea una palabra completa exacta
+                    val nameWords = nameNorm.split(" ", "-", ".", "/")
+                    fragments.forEach { f ->
+                        if (nameWords.contains(f)) score += 100
+                    }
+                    
+                    // 6. Coincidencia parcial de código de barras
+                    if (barcode.contains(normalizedQuery)) score += 50
+                    
+                    score
+                }
+                .drop(offset)
+                .take(limit)
         }
     }
 

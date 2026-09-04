@@ -986,9 +986,11 @@ fun CustomerSelectionDialog(viewModel: PosViewModel, onDismiss: () -> Unit, onSe
 @Composable
 fun WithdrawalDialog(viewModel: PosViewModel) {
     var amountText by remember { mutableStateOf("") }
+    var totalChargeText by remember { mutableStateOf("") }
     var isCommissionInCash by remember { mutableStateOf(false) }
     val isProcessing by viewModel.isProcessingWithdrawal.collectAsState()
 
+    // Sincronización inteligente de campos
     val amount = amountText.toDoubleOrNull() ?: 0.0
     val commission = amount * 0.05
     val totalToCharge = if (isCommissionInCash) amount else (amount + commission)
@@ -1002,11 +1004,46 @@ fun WithdrawalDialog(viewModel: PosViewModel) {
                 
                 OutlinedTextField(
                     value = amountText,
-                    onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) amountText = it },
-                    label = { Text("Monto a Entregar") },
+                    onValueChange = { input ->
+                        if (input.isEmpty() || input.all { c -> c.isDigit() || c == '.' }) {
+                            amountText = input
+                            val v = input.toDoubleOrNull() ?: 0.0
+                            if (v > 0) {
+                                val total = if (isCommissionInCash) v else (v * 1.05)
+                                totalChargeText = total.formatPrice().replace(",", "")
+                            } else {
+                                totalChargeText = ""
+                            }
+                        }
+                    },
+                    label = { Text("Monto a Entregar (Efectivo)") },
                     modifier = Modifier.fillMaxWidth(),
                     prefix = { Text("$") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+
+                OutlinedTextField(
+                    value = totalChargeText,
+                    onValueChange = { input ->
+                        if (input.isEmpty() || input.all { c -> c.isDigit() || c == '.' }) {
+                            totalChargeText = input
+                            val v = input.toDoubleOrNull() ?: 0.0
+                            if (v > 0) {
+                                val delivered = if (isCommissionInCash) v else (v / 1.05)
+                                amountText = delivered.formatPrice().replace(",", "")
+                            } else {
+                                amountText = ""
+                            }
+                        }
+                    },
+                    label = { Text("Total a Cobrar en Tarjeta") },
+                    modifier = Modifier.fillMaxWidth(),
+                    prefix = { Text("$") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary
+                    )
                 )
 
                 Surface(
@@ -1020,8 +1057,20 @@ fun WithdrawalDialog(viewModel: PosViewModel) {
                             Text("$${commission.formatPrice()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         }
                         
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { isCommissionInCash = !isCommissionInCash }) {
-                            Checkbox(checked = isCommissionInCash, onCheckedChange = { isCommissionInCash = it })
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { 
+                            isCommissionInCash = !isCommissionInCash 
+                            val v = amountText.toDoubleOrNull() ?: 0.0
+                            if (v > 0) {
+                                totalChargeText = (if (isCommissionInCash) v else (v * 1.05)).formatPrice().replace(",", "")
+                            }
+                        }) {
+                            Checkbox(checked = isCommissionInCash, onCheckedChange = { 
+                                isCommissionInCash = it 
+                                val v = amountText.toDoubleOrNull() ?: 0.0
+                                if (v > 0) {
+                                    totalChargeText = (if (it) v else (v * 1.05)).formatPrice().replace(",", "")
+                                }
+                            })
                             Text("Paga en Efectivo", style = MaterialTheme.typography.labelMedium)
                         }
                     }
@@ -1030,8 +1079,9 @@ fun WithdrawalDialog(viewModel: PosViewModel) {
                 if (amount > 0) {
                     Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(if (isCommissionInCash) "COBRAR EN TERMINAL (Sin comisión)" else "TOTAL A COBRAR EN TERMINAL (+5%)", style = MaterialTheme.typography.labelSmall)
+                            Text(if (isCommissionInCash) "COBRAR EN TERMINAL (Efectivo neto)" else "TOTAL FINAL A COBRAR EN TERMINAL", style = MaterialTheme.typography.labelSmall)
                             Text("$${totalToCharge.formatPrice()}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                            Text("ENTREGAR AL CLIENTE: $${amount.formatPrice()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1051,7 +1101,7 @@ fun WithdrawalDialog(viewModel: PosViewModel) {
             }
         },
         dismissButton = {
-            TextButton(onClick = { viewModel.closeWithdrawalDialog() }, enabled = !isProcessing) {
+            TextButton(onClick = { if(!isProcessing) viewModel.closeWithdrawalDialog() }, enabled = !isProcessing) {
                 Text("CANCELAR")
             }
         }

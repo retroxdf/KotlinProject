@@ -105,6 +105,7 @@ fun AppContent() {
     
     val mercadoPagoManager = remember { MercadoPagoManager() }
     val printerManager = remember { getRealPrinterManager() }
+    val scaleManager = remember { getScaleManager() }
     val currentSaleManager = remember { CurrentSaleManager(settingsRepository, globalScope) }
     
     val syncManager = remember { SyncManager(saleRepository, cashMovementRepository, productRepository, branchRepository, userRepository, employeeRepository, customerRepository, settingsRepository, globalScope) }
@@ -115,7 +116,7 @@ fun AppContent() {
     
     val authViewModel = remember { AuthViewModel(userRepository, employeeRepository, permissionRepository, settingsRepository) }
     val branchViewModel = remember { BranchViewModel(branchRepository) }
-    val peripheralViewModel = remember { PeripheralViewModel(settingsRepository, printerManager, posTerminalRepository, firebaseManager, mercadoPagoManager, productRepository, "") }
+    val peripheralViewModel = remember { PeripheralViewModel(settingsRepository, printerManager, posTerminalRepository, firebaseManager, mercadoPagoManager, productRepository, scaleManager, "") }
 
     LaunchedEffect(database) {
         if (settingsRepository.getSetting("db_initial_clear_v5") != "true") {
@@ -157,7 +158,7 @@ fun AppContent() {
         }
     }
     
-    val posViewModel = remember(branchId) { PosViewModel(productRepository, saleRepository, customerRepository, posTerminalRepository, userRepository, settingsRepository, cashMovementRepository, cashOutRepository, preCutRepository, employeeRepository, mercadoPagoManager, currentSaleManager, branchId, promotionRepository, deletionLogRepository, productReturnRepository, printerManager, firebaseManager) }
+    val posViewModel = remember(branchId) { PosViewModel(productRepository, saleRepository, customerRepository, posTerminalRepository, userRepository, settingsRepository, cashMovementRepository, cashOutRepository, preCutRepository, employeeRepository, mercadoPagoManager, currentSaleManager, branchId, promotionRepository, deletionLogRepository, productReturnRepository, printerManager, firebaseManager, scaleManager) }
     val prodVM = remember(branchId) { ProductViewModel(productRepository, branchRepository, movementRepository, userRepository, branchId) }
     val purchaseViewModel = remember(branchId) { PurchaseViewModel(productRepository, purchaseRepository, supplierRepository, cashMovementRepository, purchaseUnitRepository, branchId) }
     val historyViewModel = remember(branchId) { 
@@ -177,7 +178,7 @@ fun AppContent() {
     val contabilidadViewModel = remember(branchId) { ContabilidadViewModel(employeeRepository, userRepository, branchRepository, expenseRepository, settingsRepository, branchId) }
     val expenseViewModel = remember(branchId) { ExpenseViewModel(expenseRepository, branchId) }
     val dashboardViewModel = remember(branchId) { DashboardViewModel(saleRepository, expenseRepository, productRepository, posTerminalRepository, branchId) }
-    val branchPeripheralViewModel = remember(branchId) { PeripheralViewModel(settingsRepository, printerManager, posTerminalRepository, firebaseManager, mercadoPagoManager, productRepository, branchId) }
+    val branchPeripheralViewModel = remember(branchId) { PeripheralViewModel(settingsRepository, printerManager, posTerminalRepository, firebaseManager, mercadoPagoManager, productRepository, scaleManager, branchId) }
 
     val selectedTerminalPos by posViewModel.selectedTerminal.collectAsState()
     val defaultPriceLevel by branchPeripheralViewModel.defaultPriceLevel.collectAsState()
@@ -317,6 +318,14 @@ fun AppContent() {
                                         }
                                         if (showUserPanel) { UserPanelFullScreen(authViewModel, onDismiss = { authViewModel.closeUserPanel() }) }
                                     }
+                                    
+                                    Spacer(Modifier.height(16.dp))
+                                    Text(
+                                        text = "v1.0.3",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.Gray.copy(alpha = 0.5f),
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
                                 }
                             }
                         }

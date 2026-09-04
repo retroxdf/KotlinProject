@@ -8,6 +8,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.abtsplazita.posplazita.currentTimeMillis
 import com.abtsplazita.posplazita.playErrorSound
 import com.abtsplazita.posplazita.domain.*
@@ -47,10 +48,9 @@ class PosViewModel(
     private val deletionLogRepository: com.abtsplazita.posplazita.domain.repository.DeletionLogRepository? = null,
     private val productReturnRepository: com.abtsplazita.posplazita.domain.repository.ProductReturnRepository? = null,
     private val printerManager: PrinterManager? = null,
-    private val firebaseManager: FirebaseManager? = null
+    private val firebaseManager: FirebaseManager? = null,
+    private val scaleManager: ScaleManager = getScaleManager()
 ) : ViewModel() {
-
-    private val scaleManager = getScaleManager()
 
     enum class FocusArea { SEARCH_BAR, SEARCH_RESULTS, CART }
 
@@ -134,6 +134,7 @@ class PosViewModel(
     val sidebarIndex = _sidebarIndex.asStateFlow()
 
     init {
+        startLiveSearch()
         // Rotación automática del sidebar cada 10 segundos
         viewModelScope.launch {
             while (true) {
@@ -398,7 +399,13 @@ class PosViewModel(
         _customerSearchQuery
     ) { allCustomers, query ->
         if (query.isBlank()) allCustomers
-        else allCustomers.filter { it.name.contains(query, ignoreCase = true) || it.phone?.contains(query) == true }
+        else {
+            val normQuery = query.normalizeForSearch()
+            allCustomers.filter { 
+                it.name.normalizeForSearch().contains(normQuery) || 
+                it.phone?.contains(query) == true 
+            }.sortedBy { it.name.normalizeForSearch().indexOf(normQuery) }
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _showAddCustomerDialog = MutableStateFlow(false)
@@ -1489,7 +1496,14 @@ class PosViewModel(
 
     fun onSearchSubmit() {
         val rawQuery = _searchQuery.value.text.trim()
-        if (rawQuery.isBlank()) return
+        
+        // Si se presiona Enter con el buscador vacío pero abierto, seleccionamos el primero
+        if (rawQuery.isBlank()) {
+            if (_showSearchResults.value && searchResults.value.isNotEmpty()) {
+                selectCurrentItem()
+            }
+            return
+        }
         
         // Quitar ventana de cambio si se inicia nueva búsqueda
         _showSaleSuccessOverlay.value = false
@@ -1500,7 +1514,7 @@ class PosViewModel(
         var multiplier: Double? = null
         var query = rawQuery
 
-        // --- Soporte para cantidad * producto (Ej: .3*11 o 5*7501...) ---
+        // --- Soporte para cantidad * producto ---
         if (rawQuery.contains("*")) {
             val parts = rawQuery.split("*")
             if (parts.size == 2) {
@@ -1518,7 +1532,7 @@ class PosViewModel(
                 val customer = customerRepository?.getCustomerById(customerId)
                 if (customer != null) {
                     _selectedCustomer.value = customer
-                    onSearchQueryClear() // Limpiar buscador sin error
+                    onSearchQueryClear()
                 } else {
                     _notFoundQuery.value = query
                     _showNotFoundDialog.value = true
@@ -1529,12 +1543,13 @@ class PosViewModel(
         }
 
         viewModelScope.launch {
+            // 1. Intentar por código de barras exacto (Escaneo)
             val exactMatch = repository.getProductByBarcode(query)
             if (exactMatch != null) {
                 val mult = _searchMultiplier.value
                 if (mult != null) {
                     if (!exactMatch.isBulk && (mult % 1.0 != 0.0)) {
-                        setErrorMessage("El producto '${exactMatch.name}' no permite venta fraccionada (Granel).")
+                        setErrorMessage("El producto '${exactMatch.name}' no permite venta fraccionada.")
                         playErrorSound()
                         return@launch
                     }
@@ -1544,7 +1559,6 @@ class PosViewModel(
                     if (weight != null && weight > 0) {
                         addProduct(exactMatch, repository.getStock(exactMatch.id, branchId), weight)
                     } else {
-                        // Si falla la báscula o no hay lectura, abrir diálogo manual
                         openBulkQuantityDialog(exactMatch, repository.getStock(exactMatch.id, branchId))
                     }
                 } else if (exactMatch.isBulk) {
@@ -1554,19 +1568,25 @@ class PosViewModel(
                     addProduct(exactMatch, stock)
                 }
                 selectSearchQuery()
-                _searchMultiplier.value = null // Limpiar después de usar
-            } else {
-                repository.searchProducts(query).first().let { results ->
-                    if (results.isNotEmpty()) {
-                        _searchResults.value = results
-                        _selectedSearchIndex.value = 0
-                        _showSearchResults.value = true
-                        _currentFocusArea.value = FocusArea.SEARCH_RESULTS
-                    } else {
-                        _notFoundQuery.value = query
-                        _showNotFoundDialog.value = true
-                        playErrorSound() 
+                _searchMultiplier.value = null 
+                return@launch
+            }
+
+            // 2. Si no hay coincidencia exacta, realizar búsqueda forzada
+            repository.searchProducts(query).first().let { results ->
+                if (results.isNotEmpty()) {
+                    _searchResults.value = results
+                    _selectedSearchIndex.value = 0
+                    _showSearchResults.value = true
+                    _currentFocusArea.value = FocusArea.SEARCH_RESULTS
+                    
+                    if (results.size == 1) {
+                        selectCurrentItem()
                     }
+                } else {
+                    _notFoundQuery.value = query
+                    _showNotFoundDialog.value = true
+                    playErrorSound() 
                 }
             }
         }
@@ -2050,6 +2070,36 @@ class PosViewModel(
             } catch (e: Exception) {
                 setErrorMessage("Error al sincronizar: ${e.message}")
             }
+        }
+    }
+
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+    private fun startLiveSearch() {
+        viewModelScope.launch {
+            _searchQuery
+                .debounce(250)
+                .map { it.text.trim() }
+                .distinctUntilChanged()
+                .collectLatest { query ->
+                    if (query.length < 2) {
+                        if (query.isEmpty()) {
+                            _searchResults.value = emptyList()
+                            _showSearchResults.value = false
+                        }
+                        return@collectLatest
+                    }
+
+                    repository.searchProducts(query, limit = 50).collect { results ->
+                        if (_searchQuery.value.text.isNotBlank()) {
+                            _searchResults.value = results
+                            if (results.isNotEmpty() && !_showSearchResults.value && _currentFocusArea.value != FocusArea.CART) {
+                                _showSearchResults.value = true
+                                _currentFocusArea.value = FocusArea.SEARCH_RESULTS
+                                _selectedSearchIndex.value = 0
+                            }
+                        }
+                    }
+                }
         }
     }
 }

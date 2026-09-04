@@ -11,6 +11,7 @@ import com.abtsplazita.posplazita.domain.calculateDefaultPrice2
 import com.abtsplazita.posplazita.domain.calculateDefaultPrice3
 import com.abtsplazita.posplazita.domain.Product
 import com.abtsplazita.posplazita.domain.User
+import com.abtsplazita.posplazita.domain.normalizeForSearch
 import com.abtsplazita.posplazita.domain.StockMovement
 import com.abtsplazita.posplazita.domain.repository.ProductRepository
 import com.abtsplazita.posplazita.domain.repository.BranchRepository
@@ -135,12 +136,40 @@ class ProductViewModel(
     val selectedCategory = _selectedCategory.asStateFlow()
 
     val filteredProducts: StateFlow<List<Product>> = combine(products, _catalogSearchQuery, _selectedCategory) { allProducts, query, category ->
+        val trimmedQuery = query.trim()
+        val normalizedQuery = trimmedQuery.normalizeForSearch()
+        val fragments = normalizedQuery.split(" ").filter { it.isNotBlank() }
+
         allProducts.filter { product ->
-            val matchesQuery = query.isBlank() || 
-                product.name.contains(query, ignoreCase = true) || 
-                product.barcode.contains(query, ignoreCase = true)
             val matchesCategory = category == null || product.category == category
-            matchesQuery && matchesCategory
+            if (!matchesCategory) return@filter false
+            
+            if (trimmedQuery.isBlank()) return@filter true
+
+            val searchArea = "${product.name} ${product.barcode} ${product.barcode2 ?: ""} ${product.barcode3 ?: ""} ${product.barcode4 ?: ""}".normalizeForSearch()
+            fragments.all { fragment -> searchArea.contains(fragment) }
+        }.sortedByDescending { product ->
+            if (trimmedQuery.isBlank()) return@sortedByDescending 0
+            
+            var score = 0
+            val nameNorm = product.name.normalizeForSearch()
+            
+            if (product.barcode == trimmedQuery) score += 500
+            if (nameNorm == normalizedQuery) score += 400
+            if (nameNorm.startsWith(normalizedQuery)) score += 200
+            
+            var lastIndex = -1
+            val inOrder = fragments.all { f ->
+                val index = nameNorm.indexOf(f, lastIndex + 1)
+                if (index != -1) {
+                    lastIndex = index
+                    true
+                } else false
+            }
+            if (inOrder) score += 150
+
+            fragments.forEach { f -> if (nameNorm.split(" ").contains(f)) score += 50 }
+            score
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

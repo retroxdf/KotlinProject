@@ -35,10 +35,9 @@ class PeripheralViewModel(
     private val firebaseManager: FirebaseManager? = null,
     private val mercadoPagoManager: MercadoPagoManager? = null,
     private val productRepository: ProductRepository? = null,
+    private val scaleManager: ScaleManager = getScaleManager(),
     val branchId: String = ""
 ) : ViewModel() {
-
-    private val scaleManager = getScaleManager()
 
     // --- Gestión de Cajas (Terminales) ---
     val terminals: StateFlow<List<PosTerminal>> = if (terminalRepository != null && branchId.isNotBlank()) {
@@ -207,6 +206,25 @@ class PeripheralViewModel(
                 settings["scale_baud"]?.let { _scaleBaudRate.value = it }
                 settings["scale_seq"]?.let { _scaleSequence.value = it }
                 settings["scale_delay"]?.let { _scaleDelay.value = it }
+
+                // Cargar estado de conexión de la báscula
+                settings["scale_active"]?.let { active ->
+                    val shouldBeConnected = active.toBoolean()
+                    if (shouldBeConnected && !_isScaleConnected.value) {
+                        _isScaleConnected.value = true
+                        viewModelScope.launch {
+                            kotlinx.coroutines.delay(1000)
+                            val baud = _scaleBaudRate.value.toIntOrNull() ?: 9600
+                            val delay = _scaleDelay.value.toIntOrNull() ?: 100
+                            scaleManager.connect(
+                                port = _scalePort.value,
+                                baudRate = baud,
+                                sequence = _scaleSequence.value,
+                                delay = delay
+                            )
+                        }
+                    }
+                }
 
                 settings["redmas_user"]?.let { _redMasUser.value = it }
                 settings["redmas_pass"]?.let { _redMasPass.value = it }
@@ -557,6 +575,7 @@ class PeripheralViewModel(
             if (_isScaleConnected.value) {
                 scaleManager.disconnect()
                 _isScaleConnected.value = false
+                saveSetting("scale_active", "false")
             } else {
                 val baud = _scaleBaudRate.value.toIntOrNull() ?: 9600
                 val delay = _scaleDelay.value.toIntOrNull() ?: 100
@@ -567,6 +586,7 @@ class PeripheralViewModel(
                     delay = delay
                 )
                 _isScaleConnected.value = connected
+                saveSetting("scale_active", connected.toString())
             }
             
             _isTestingScale.value = false

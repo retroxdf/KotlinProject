@@ -2,6 +2,7 @@ package com.abtsplazita.posplazita.ui.inventory
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
@@ -62,7 +64,7 @@ fun InventoryModule(viewModel: InventoryViewModel) {
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text("Ajuste de inventario") },
-                                leadingIcon = { Icon(Icons.Default.EditAttributes, null) },
+                                leadingIcon = { Icon(Icons.Default.Edit, null) },
                                 onClick = { 
                                     showMenu = false
                                     showAdjustmentDialog = true 
@@ -207,106 +209,116 @@ fun InventoryAdjustmentDialog(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val focusRequester = remember { FocusRequester() }
 
-    AlertDialog(
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.95f).fillMaxHeight(0.95f),
-        confirmButton = {
-            Button(
-                onClick = { 
-                    viewModel.finalizeAdjustment()
-                    onDismiss()
-                },
-                enabled = capturedItems.isNotEmpty()
-            ) {
-                Text("FINALIZAR AJUSTE")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("CANCELAR") }
-        },
-        title = { Text("Módulo de Ajuste Físico") },
-        text = {
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surface
+        ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Buscador de captura
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.updateSearchQuery(it) },
-                    label = { Text("Escanea o escribe código para capturar") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester)
-                        .onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                                viewModel.onSearchSubmit()
-                                true
-                            } else false
-                        },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color(0xFF2196F3),
-                        focusedBorderColor = Color(0xFF2196F3),
-                        focusedLabelColor = Color(0xFF2196F3)
-                    ),
-                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { viewModel.onSearchSubmit() })
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text("Productos Capturados (Los últimos aparecen primero)", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LazyColumn(modifier = Modifier.weight(1f)) {
-                    items(capturedItems) { item ->
-                        var qtyText by remember(item.product.id) { mutableStateOf(TextFieldValue(item.count.toString())) }
-                        
-                        // Sincronizar instantáneamente si el conteo cambia desde afuera (re-escaneo)
-                        LaunchedEffect(item.count) {
-                            val newText = item.count.toString()
-                            if (qtyText.text != newText) {
-                                qtyText = qtyText.copy(text = newText)
-                            }
+                // Cabecera Diálogo
+                Surface(
+                    color = Color(0xFF0056A0),
+                    contentColor = Color.White,
+                    modifier = Modifier.fillMaxWidth().height(60.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                         }
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        Text("Ajuste Físico", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                        TextButton(
+                            onClick = { 
+                                viewModel.finalizeAdjustment()
+                                onDismiss()
+                            },
+                            enabled = capturedItems.isNotEmpty(),
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(item.product.name, fontWeight = FontWeight.Bold)
-                                    Text(item.product.barcode, style = MaterialTheme.typography.labelSmall)
+                            Text("GUARDAR", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
+                    // Buscador de captura
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { viewModel.updateSearchQuery(it) },
+                        label = { Text("Escanea o escribe código") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                    viewModel.onSearchSubmit()
+                                    true
+                                } else false
+                            },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { viewModel.onSearchSubmit() })
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text("Capturados (${capturedItems.size})", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyColumn(modifier = Modifier.weight(1f)) {
+                        items(capturedItems) { item ->
+                            var qtyText by remember(item.product.id) { mutableStateOf(TextFieldValue(item.count.toString())) }
+                            
+                            LaunchedEffect(item.count) {
+                                val newText = item.count.toString()
+                                if (qtyText.text != newText) {
+                                    qtyText = qtyText.copy(text = newText)
                                 }
-                                
-                                OutlinedTextField(
-                                    value = qtyText,
-                                    onValueChange = { 
-                                        if (it.text.isEmpty() || it.text.all { c -> c.isDigit() || c == '.' }) {
-                                            qtyText = it
-                                            it.text.toDoubleOrNull()?.let { q ->
-                                                viewModel.updateCapturedQuantity(item.product.id, q)
+                            }
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(item.product.name, fontWeight = FontWeight.Bold, maxLines = 1)
+                                        Text(item.product.barcode, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    
+                                    OutlinedTextField(
+                                        value = qtyText,
+                                        onValueChange = { 
+                                            if (it.text.isEmpty() || it.text.all { c -> c.isDigit() || c == '.' }) {
+                                                qtyText = it
+                                                it.text.toDoubleOrNull()?.let { q ->
+                                                    viewModel.updateCapturedQuantity(item.product.id, q)
+                                                }
                                             }
-                                        }
-                                    },
-                                    modifier = Modifier.width(100.dp).onFocusChanged {
-                                        if (it.isFocused) qtyText = qtyText.copy(selection = TextRange(0, qtyText.text.length))
-                                    },
-                                    label = { Text("Contado") },
-                                    singleLine = true,
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = Color(0xFF2196F3),
-                                        focusedBorderColor = Color(0xFF2196F3)
-                                    ),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                )
-                                
-                                IconButton(onClick = { viewModel.removeCapturedItem(item.product.id) }) {
-                                    Icon(Icons.Default.Delete, null, tint = Color.Red)
+                                        },
+                                        modifier = Modifier.width(110.dp).onFocusChanged {
+                                            if (it.isFocused) qtyText = qtyText.copy(selection = TextRange(0, qtyText.text.length))
+                                        },
+                                        label = { Text("Contado") },
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    )
+                                    
+                                    IconButton(onClick = { viewModel.removeCapturedItem(item.product.id) }) {
+                                        Icon(Icons.Default.Delete, null, tint = Color.Red)
+                                    }
                                 }
                             }
                         }
@@ -314,7 +326,7 @@ fun InventoryAdjustmentDialog(
                 }
             }
         }
-    )
+    }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()

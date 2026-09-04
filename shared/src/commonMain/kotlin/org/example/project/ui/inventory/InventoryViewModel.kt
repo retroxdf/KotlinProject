@@ -2,6 +2,7 @@ package com.abtsplazita.posplazita.ui.inventory
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.abtsplazita.posplazita.domain.*
@@ -25,16 +26,20 @@ class InventoryViewModel(
         _inventoryData,
         repository.getAllInventory(),
         branchRepository.getAllBranches()
-    ) { currentData: List<ProductInventory>, inventory: List<Inventory>, allBranches: List<Branch> ->
-        if (currentData.isEmpty()) return@combine emptyList<ProductInventory>()
+    ) { currentData, allInventoryItems, allBranches ->
+        if (currentData.isEmpty() || allBranches.isEmpty()) return@combine emptyList<ProductInventory>()
+        
+        // Optimización: Mapa de acceso rápido O(1)
+        val stockMap = allInventoryItems.associateBy { it.productId + "_" + it.branchId }
+        
         currentData.map { item ->
-            val stocks = mutableMapOf<String, Double>()
-            allBranches.forEach { b ->
-                stocks[b.id] = inventory.find { it.productId == item.product.id && it.branchId == b.id }?.stock ?: 0.0
+            val stocks = allBranches.associate { b ->
+                b.id to (stockMap[item.product.id + "_" + b.id]?.stock ?: 0.0)
             }
             item.copy(branchStocks = stocks)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default)
+     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
