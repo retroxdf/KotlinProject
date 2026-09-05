@@ -326,7 +326,7 @@ fun AppContent() {
                                     
                                     Spacer(Modifier.height(16.dp))
                                     Text(
-                                        text = "v1.0.6",
+                                        text = "v1.0.7",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.Gray.copy(alpha = 0.5f),
                                         modifier = Modifier.padding(bottom = 8.dp)

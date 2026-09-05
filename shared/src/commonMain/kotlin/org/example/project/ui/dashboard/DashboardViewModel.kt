@@ -60,6 +60,7 @@ class DashboardViewModel(
         
         // Top 30 productos vendidos
         val topProducts = filteredSales.flatMap { it.items }
+            .filter { !it.productId.startsWith("COMMON_") } // Excluir Producto Común
             .groupBy { it.productId }
             .map { (id, items) -> 
                 val name = productMap[id]?.name ?: "Producto #$id"

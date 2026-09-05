@@ -23,7 +23,7 @@ class JvmUpdateManager : UpdateManager {
         }
     }
 
-    override fun getAppVersion(): String = "1.0.6"
+    override fun getAppVersion(): String = "1.0.7"
 
     override suspend fun fetchLatestRelease(): AppUpdateInfo? {
         return try {

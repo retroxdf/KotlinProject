@@ -863,11 +863,6 @@ fun CashOutScreen(
                 Spacer(Modifier.height(24.dp))
                 Text("FILTRAR POR CAJA", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = selectedTerminalId == null,
-                        onClick = { viewModel.filterByTerminal(null) },
-                        label = { Text("Todas") }
-                    )
                     terminalBalances.forEach { terminal ->
                         FilterChip(
                             selected = selectedTerminalId == terminal.terminalId,

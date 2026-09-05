@@ -224,24 +224,37 @@ class HistoryViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val pendingSales = combine(sales, cashOuts, _selectedTerminalId) { allSales, allCashOuts, terminalId ->
+        if (terminalId == null) return@combine emptyList<Sale>() // Forzar selección de caja para arqueo
+
         val lastCashOut = allCashOuts
-            .filter { if (terminalId != null) it.terminalId == terminalId else true }
+            .filter { it.terminalId == terminalId }
             .maxByOrNull { it.timestamp }
         
         val startTime = lastCashOut?.timestamp ?: 0L
+        // sales ya viene filtrado por terminal y branch en el flatMapLatest superior
         allSales.filter { it.timestamp > startTime }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val pendingMovements = combine(movements, cashOuts, _selectedTerminalId) { allMovements, allCashOuts, terminalId ->
+        if (terminalId == null) return@combine emptyList<CashMovement>()
+
         val lastCashOut = allCashOuts
-            .filter { if (terminalId != null) it.terminalId == terminalId else true }
+            .filter { it.terminalId == terminalId }
             .maxByOrNull { it.timestamp }
         
         val startTime = lastCashOut?.timestamp ?: 0L
-        allMovements.filter { it.timestamp > startTime }
+        allMovements.filter { mov ->
+            mov.terminalId == terminalId && mov.timestamp > startTime
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val terminalBalances = combine(sales, cashOuts, movements, availableTerminals) { allSales, allCashOuts, allMovements, terminals ->
+    // Nuevo: Flujo de ventas de toda la sucursal (sin filtro de terminal de la UI) 
+    // para que la pantalla de saldos sea siempre correcta
+    private val allSalesOfBranch = _selectedBranchId.flatMapLatest { bId ->
+        saleRepository.getSales(bId)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val terminalBalances = combine(allSalesOfBranch, cashOuts, movements, availableTerminals) { allSales, allCashOuts, allMovements, terminals ->
         terminals.map { terminal ->
             val lastCashOut = allCashOuts
                 .filter { it.terminalId == terminal.id }
