@@ -258,6 +258,13 @@ fun AppContent() {
                 Surface(
                     modifier = Modifier.focusRequester(mainFocusRequester).focusable().onPreviewKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
+                            // PRIORIDAD MÁXIMA AL ESCAPE
+                            if (event.key == Key.Escape) {
+                                if (currentScreen == "pos") {
+                                    posViewModel.handleGlobalEscape { currentScreen = "checkout" }
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
                             val isDialogSubScreen = currentScreen == "checkout" || currentScreen == "purchases"
                             when (event.key) {
                                 Key.F1 -> if (!isDialogSubScreen && currentScreen != "pos" && (userPermissions[Permission.MAKE_SALE] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { currentScreen = "pos"; true } else false
@@ -326,7 +333,7 @@ fun AppContent() {
                                     
                                     Spacer(Modifier.height(16.dp))
                                     Text(
-                                        text = "v1.0.7",
+                                        text = "v1.0.8",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.Gray.copy(alpha = 0.5f),
                                         modifier = Modifier.padding(bottom = 8.dp)

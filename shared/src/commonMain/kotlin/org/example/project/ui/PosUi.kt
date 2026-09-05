@@ -110,6 +110,12 @@ fun PosMainScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.focusSearchRequest.collect {
+            focusRequester.requestFocus()
+        }
+    }
+
     Scaffold(
         topBar = {
             BoxWithConstraints {
@@ -264,7 +270,17 @@ fun PosMainScreen(
                                                     if (selectedCartIndex in items.indices) { viewModel.removeSaleItem(items[selectedCartIndex]); true } else false
                                                 } else if (currentFocusArea == PosViewModel.FocusArea.SEARCH_BAR) { viewModel.clearSale(); true } else false
                                             }
-                                            Key.Escape -> { if (items.isNotEmpty()) onNavigateToCheckout() else viewModel.onSearchQueryClear(); true }
+                                            Key.Escape -> { 
+                                                if (showSearchResults) {
+                                                    viewModel.onSearchQueryClear()
+                                                } else if (items.isNotEmpty()) {
+                                                    onNavigateToCheckout()
+                                                } else {
+                                                    viewModel.onSearchQueryClear()
+                                                    viewModel.selectSearchQuery()
+                                                }
+                                                true 
+                                            }
                                             else -> false
                                         }
                                     }

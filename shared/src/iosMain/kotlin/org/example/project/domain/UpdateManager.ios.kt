@@ -1,7 +1,7 @@
 package com.abtsplazita.posplazita.domain
 
 class IosUpdateManager : UpdateManager {
-    override fun getAppVersion(): String = "1.0.7"
+    override fun getAppVersion(): String = "1.0.8"
     override suspend fun downloadAndInstall(url: String, onProgress: (Float) -> Unit): Boolean = false
 }
 

@@ -23,7 +23,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Exe, TargetFormat.Msi)
             packageName = "PlazitaPOS"
-            packageVersion = "1.0.7"
+            packageVersion = "1.0.8"
             description = "Plazita Point of Sale System"
             copyright = "© 2026 ABTS Plazita"
             vendor = "ABTS Plazita"

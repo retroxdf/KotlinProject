@@ -1602,7 +1602,7 @@ class PosViewModel(
                 return@launch
             }
 
-            // 2. Si no hay coincidencia exacta, realizar búsqueda forzada
+            // 2. Si no hay coincidencia exacta, realizar búsqueda por nombre/fragmentos
             repository.searchProducts(query).first().let { results ->
                 if (results.isNotEmpty()) {
                     _searchResults.value = results
@@ -1610,9 +1610,8 @@ class PosViewModel(
                     _showSearchResults.value = true
                     _currentFocusArea.value = FocusArea.SEARCH_RESULTS
                     
-                    if (results.size == 1) {
-                        selectCurrentItem()
-                    }
+                    // Nota: Ya no auto-seleccionamos si hay solo 1 resultado, 
+                    // para forzar que sea el usuario quien elija o que el código de barras sea exacto.
                 } else {
                     _notFoundQuery.value = query
                     _showNotFoundDialog.value = true
@@ -1626,10 +1625,27 @@ class PosViewModel(
         _currentFocusArea.value = area
     }
 
+    private val _focusSearchRequest = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val focusSearchRequest = _focusSearchRequest.asSharedFlow()
+
     fun selectSearchQuery() {
         val text = _searchQuery.value.text
         _searchQuery.value = _searchQuery.value.copy(selection = TextRange(0, text.length))
         _currentFocusArea.value = FocusArea.SEARCH_BAR
+        _focusSearchRequest.tryEmit(Unit)
+    }
+
+    fun handleGlobalEscape(onNavigateToCheckout: () -> Unit) {
+        if (_showSearchResults.value) {
+            onSearchQueryClear()
+            selectSearchQuery()
+        } else if (itemCount.value > 0 && _currentFocusArea.value == FocusArea.SEARCH_BAR) {
+            prepareCheckout()
+            onNavigateToCheckout()
+        } else {
+            onSearchQueryClear() // Asegurar que esté vacío si no hay resultados
+            selectSearchQuery()
+        }
     }
 
     fun onSearchQueryClear() {
