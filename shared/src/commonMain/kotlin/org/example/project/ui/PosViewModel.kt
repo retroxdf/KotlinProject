@@ -1120,7 +1120,15 @@ class PosViewModel(
             }
 
             val currentTotal = currentSaleManager.total.value
-            val amountPaid = _amountPaidText.value.text.toDoubleOrNull() ?: 0.0
+            
+            // Capturar el monto pagado del texto de forma segura y robusta
+            val rawPaidText = _amountPaidText.value.text.trim()
+            val amountPaid = if (rawPaidText.isEmpty() || rawPaidText == currentTotal.formatPrice().replace(",", "")) {
+                currentTotal
+            } else {
+                rawPaidText.toDoubleOrNull() ?: currentTotal
+            }
+
             val paymentMethod = _paymentMethod.value
             val isCredit = paymentMethod == "Crédito"
             val isMP = paymentMethod == "Tarjeta"
@@ -1212,8 +1220,8 @@ class PosViewModel(
 
             _isProcessingSale.value = true
             try {
-                if (paymentMethod == "Efectivo" && amountPaid < currentTotal) {
-                    setErrorMessage("El monto pagado es insuficiente.")
+                if (paymentMethod == "Efectivo" && amountPaid < (currentTotal - 0.01)) {
+                    setErrorMessage("El monto pagado ($${amountPaid.formatPrice()}) es insuficiente.")
                     _isProcessingSale.value = false
                     return@launch
                 }
@@ -1237,6 +1245,10 @@ class PosViewModel(
                 val now = currentTimeMillis()
                 val saleId = saleRepository.generateUniqueSaleId(branchId, _selectedTerminal.value?.id, prefix = _ticketConfig.value.ticketIdPrefix)
                 
+                // Aseguramos que el cambio se calcule con los valores estáticos capturados al inicio
+                val diff = amountPaid - currentTotal
+                val finalChange = if (paymentMethod == "Efectivo" && diff > 0.001) diff else 0.0
+
                 val sale = Sale(
                     id = saleId,
                     timestamp = now,
@@ -1250,15 +1262,16 @@ class PosViewModel(
                     cashAmount = if (paymentMethod == "Efectivo") currentTotal else 0.0,
                     creditAmount = if (isCredit) currentTotal else 0.0,
                     receivedAmount = if (paymentMethod == "Efectivo") amountPaid else currentTotal,
-                    changeAmount = if (paymentMethod == "Efectivo") (amountPaid - currentTotal) else 0.0,
+                    changeAmount = finalChange,
                     paymentMethod = paymentMethod,
                     comment = _saleComment.value,
                     originalWebOrderId = currentSaleManager.currentWebOrderId.value
                 )
+
                 
                 saleRepository.saveSale(sale)
                 
-                _saleChange.value = sale.changeAmount
+                _saleChange.value = finalChange
                 _showSaleSuccessOverlay.value = true
                 successJob?.cancel()
                 successJob = viewModelScope.launch {
@@ -1348,9 +1361,7 @@ class PosViewModel(
                     printerManager?.openDrawer()
                 }
 
-                if (_paymentMethod.value == "Efectivo") {
-                    _saleChange.value = amountPaid - currentTotal
-                } else {
+                if (paymentMethod != "Efectivo") {
                     _showCardSuccess.value = true
                 }
 
@@ -1839,8 +1850,9 @@ class PosViewModel(
     fun addCashMovement(amount: Double, reason: String, isManual: Boolean = true) {
         val type = _showCashMovementDialog.value ?: (if (amount >= 0) CashMovementType.IN else CashMovementType.OUT)
         val absAmount = abs(amount)
-        if (isManual && type == CashMovementType.OUT && absAmount > _cashInDrawer.value) {
-                setErrorMessage("No hay fondo suficiente ($${_cashInDrawer.value.formatPrice()}).")
+        if (isManual && type == CashMovementType.OUT && absAmount > (_cashInDrawer.value + 0.01)) {
+            setErrorMessage("Fondo insuficiente ($${_cashInDrawer.value.formatPrice()})")
+            playErrorSound()
             return
         }
         viewModelScope.launch {

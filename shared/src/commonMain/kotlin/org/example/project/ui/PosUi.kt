@@ -88,6 +88,7 @@ fun PosMainScreen(
     val showNotFound by viewModel.showNotFoundDialog.collectAsState()
     val showSaleSuccess by viewModel.showSaleSuccessOverlay.collectAsState()
     val preCutResult by viewModel.preCutResult.collectAsState()
+    val showCashMovementDialog by viewModel.showCashMovementDialog.collectAsState()
     
     val sidebarItems by viewModel.sidebarItems.collectAsState()
     val sidebarIndex by viewModel.sidebarIndex.collectAsState()
@@ -770,70 +771,7 @@ fun PosMainScreen(
     if (showHeldSalesDialog) HeldSalesDialog(viewModel, onDismiss = { viewModel.closeHeldSalesDialog() })
     if (showReturnDialog) ReturnDialog(viewModel, onDismiss = { viewModel.closeReturnDialog() })
     if (showWithdrawalDialog) WithdrawalDialog(viewModel)
-    if (showPreCutDialog) {
-        Dialog(onDismissRequest = { viewModel.closePreCutDialog() }) {
-            Card(
-                modifier = Modifier.width(450.dp),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
-                Column {
-                    Surface(
-                        color = Color(0xFF0056A0),
-                        contentColor = Color.White,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Analytics, null)
-                            Spacer(Modifier.width(12.dp))
-                            Text("Precorte de Caja", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        Text("Verificación de efectivo en turno", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                        Spacer(Modifier.height(24.dp))
-                        
-                        OutlinedTextField(
-                            value = preCutAmount,
-                            onValueChange = { if (it.text.isEmpty() || it.text.all { c -> c.isDigit() || c == '.' }) preCutAmount = it },
-                            label = { Text("Efectivo Contado en Caja") },
-                            modifier = Modifier.fillMaxWidth(),
-                            prefix = { Text("$", fontWeight = FontWeight.Bold) },
-                            textStyle = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Black),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "Nota: Este proceso cerrará tu turno actual y guardará el registro para auditoría.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.Gray
-                        )
-
-                        Spacer(Modifier.height(32.dp))
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            TextButton(onClick = { viewModel.closePreCutDialog() }, modifier = Modifier.weight(1f)) {
-                                Text("CANCELAR")
-                            }
-                            Button(
-                                onClick = { preCutAmount.text.toDoubleOrNull()?.let { viewModel.savePreCut(it, currentUserId) } },
-                                modifier = Modifier.weight(1.5f).height(56.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0056A0))
-                            ) {
-                                Text("REALIZAR PRECORTE", fontWeight = FontWeight.Black)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    
     if (showCommonDialog) CommonProductDialog(viewModel, onDismiss = { viewModel.closeCommonProductDialog() })
     if (showMultiserviceDialog) MultiserviceDialog(viewModel, onDismiss = { viewModel.closeMultiserviceDialog() })
     if (showCommentDialog) {
@@ -853,6 +791,10 @@ fun PosMainScreen(
             text = { Text("El código '${viewModel.notFoundQuery.value}' no existe en el catálogo.") },
             confirmButton = { Button(onClick = { viewModel.closeNotFoundDialog() }) { Text("ENTENDIDO") } }
         )
+    }
+
+    if (showCashMovementDialog != null) {
+        CashMovementDialog(viewModel, type = showCashMovementDialog!!)
     }
 
     if (preCutResult != null) {
@@ -1742,4 +1684,184 @@ fun CommonProductDialog(viewModel: PosViewModel, onDismiss: () -> Unit) {
 @Composable
 fun MultiserviceDialog(viewModel: PosViewModel, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Multiservicios") }, text = { Text("Opciones...") }, confirmButton = { Button(onClick = onDismiss) { Text("CERRAR") } })
+}
+
+@Composable
+fun PreCutDialog(viewModel: PosViewModel, currentUserId: String) {
+    var preCutAmount by remember { mutableStateOf(TextFieldValue("")) }
+    
+    Dialog(onDismissRequest = { viewModel.closePreCutDialog() }) {
+        Card(
+            modifier = Modifier.width(450.dp),
+            shape = RoundedCornerShape(20.dp),
+            elevation = CardDefaults.cardElevation(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column {
+                Surface(
+                    color = Color(0xFF0056A0),
+                    contentColor = Color.White,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Analytics, null)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Precorte de Caja", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text("Verificación de efectivo en turno", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                    Spacer(Modifier.height(24.dp))
+                    
+                    OutlinedTextField(
+                        value = preCutAmount,
+                        onValueChange = { if (it.text.isEmpty() || it.text.all { c -> c.isDigit() || c == '.' }) preCutAmount = it },
+                        label = { Text("Efectivo Contado en Caja") },
+                        modifier = Modifier.fillMaxWidth(),
+                        prefix = { Text("$", fontWeight = FontWeight.Bold) },
+                        textStyle = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Black),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Nota: Este proceso cerrará tu turno actual y guardará el registro para auditoría.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+
+                    Spacer(Modifier.height(32.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TextButton(onClick = { viewModel.closePreCutDialog() }, modifier = Modifier.weight(1f)) {
+                            Text("CANCELAR")
+                        }
+                        Button(
+                            onClick = { preCutAmount.text.toDoubleOrNull()?.let { viewModel.savePreCut(it, currentUserId) } },
+                            modifier = Modifier.weight(1.5f).height(56.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0056A0))
+                        ) {
+                            Text("REALIZAR PRECORTE", fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CashMovementDialog(viewModel: PosViewModel, type: CashMovementType) {
+    var amountText by remember { mutableStateOf("") }
+    var reasonText by remember { mutableStateOf("") }
+    var showInsufficientFundsError by remember { mutableStateOf(false) }
+    
+    val cashInDrawer by viewModel.cashInDrawer.collectAsState()
+    val amountFocusRequester = remember { FocusRequester() }
+    val reasonFocusRequester = remember { FocusRequester() }
+    
+    val isIn = type == CashMovementType.IN
+    val amount = amountText.toDoubleOrNull() ?: 0.0
+
+    fun attemptSubmit() {
+        if (amount <= 0 || reasonText.isBlank()) return
+        
+        val isInsufficient = !isIn && amount > (cashInDrawer + 0.01)
+        if (isInsufficient) {
+            showInsufficientFundsError = true
+            com.abtsplazita.posplazita.playErrorSound()
+        } else {
+            viewModel.addCashMovement(amount, reasonText)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { viewModel.closeCashMovementDialog() },
+        title = { 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(if (isIn) Icons.Default.AddCircle else Icons.Default.RemoveCircle, null, tint = if (isIn) Color(0xFF2E7D32) else Color.Red)
+                Spacer(Modifier.width(12.dp))
+                Text(if (isIn) "Entrada de Dinero" else "Salida de Dinero", fontWeight = FontWeight.Black)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Registra un movimiento manual de efectivo en el cajón.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                
+                Column {
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { 
+                            if (it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) {
+                                amountText = it
+                                showInsufficientFundsError = false // Reset error while typing
+                            }
+                        },
+                        label = { Text("Cantidad ($)") },
+                        modifier = Modifier.fillMaxWidth().focusRequester(amountFocusRequester)
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                    reasonFocusRequester.requestFocus()
+                                    true
+                                } else false
+                            },
+                        isError = showInsufficientFundsError,
+                        textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                    
+                    if (showInsufficientFundsError) {
+                        Text(
+                            text = "Fondo insuficiente",
+                            color = Color.Red,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(top = 4.dp, start = 8.dp)
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = reasonText,
+                    onValueChange = { 
+                        reasonText = it 
+                        showInsufficientFundsError = false // Reset error while typing
+                    },
+                    label = { Text("Concepto / Motivo") },
+                    modifier = Modifier.fillMaxWidth().focusRequester(reasonFocusRequester)
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
+                                attemptSubmit()
+                                true
+                            } else false
+                        },
+                    placeholder = { Text("Ej: Pago a proveedor, fondo inicial...") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { attemptSubmit() },
+                enabled = amountText.isNotEmpty() && reasonText.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = if (isIn) Color(0xFF2E7D32) else Color.Red)
+            ) {
+                Text("REGISTRAR ${if(isIn) "ENTRADA" else "SALIDA"}")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { viewModel.closeCashMovementDialog() }) {
+                Text("CANCELAR")
+            }
+        }
+    )
+
+    LaunchedEffect(Unit) {
+        delay(100)
+        amountFocusRequester.requestFocus()
+    }
 }

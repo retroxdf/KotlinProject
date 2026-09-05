@@ -53,6 +53,7 @@ import com.abtsplazita.posplazita.formatTimestamp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.datetime.*
+import kotlin.math.abs
 
 @Composable
 fun HistoryModule(viewModel: HistoryViewModel, onLogout: () -> Unit = {}) {
@@ -812,8 +813,129 @@ fun DeletionLogsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-fun CashOutScreen(viewModel: HistoryViewModel, onLogout: () -> Unit, showTotalPreference: Boolean, onNavigateToPos: () -> Unit) {
-    Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Pantalla de Corte") }
+fun CashOutScreen(
+    viewModel: HistoryViewModel, 
+    onLogout: () -> Unit, 
+    showTotalPreference: Boolean, 
+    onNavigateToPos: () -> Unit
+) {
+    val pendingSales by viewModel.pendingSales.collectAsState()
+    val pendingMovements by viewModel.pendingMovements.collectAsState()
+    val terminalBalances by viewModel.terminalBalances.collectAsState()
+    val selectedTerminalId by viewModel.selectedTerminalId.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
+    
+    var countedAmountText by remember { mutableStateOf("") }
+    val scrollState = rememberScrollState()
+
+    val totalCashSales = pendingSales.sumOf { it.cashAmount }
+    val totalIn = pendingMovements.filter { it.type == CashMovementType.IN }.sumOf { it.amount }
+    val totalOut = pendingMovements.filter { it.type == CashMovementType.OUT }.sumOf { it.amount }
+    
+    val expectedAmount = totalCashSales + totalIn - totalOut
+
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+        // Cabecera Azul
+        Surface(color = Color(0xFF0056A0), contentColor = Color.White) {
+            Row(modifier = Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onNavigateToPos) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White) }
+                Text("CORTE DE CAJA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+                TextButton(onClick = onLogout) { Text("SALIR", color = Color.White) }
+            }
+        }
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            // LADO IZQUIERDO: RESUMEN
+            Column(modifier = Modifier.weight(1f).padding(24.dp).verticalScroll(scrollState)) {
+                Text("RESUMEN DE MOVIMIENTOS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(16.dp))
+                
+                Card(colors = CardDefaults.cardColors(containerColor = Color.Gray.copy(alpha = 0.05f))) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        DetailRow("Ventas en Efectivo", "$${totalCashSales.formatPrice()}", color = Color(0xFF2E7D32))
+                        DetailRow("Entradas de Dinero", "+$${totalIn.formatPrice()}", color = Color(0xFF2E7D32))
+                        DetailRow("Salidas de Dinero", "-$${totalOut.formatPrice()}", color = Color.Red)
+                        HorizontalDivider()
+                        DetailRow("TOTAL ESPERADO", "$${expectedAmount.formatPrice()}", isBold = true, color = Color(0xFF0056A0))
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+                Text("FILTRAR POR CAJA", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = selectedTerminalId == null,
+                        onClick = { viewModel.filterByTerminal(null) },
+                        label = { Text("Todas") }
+                    )
+                    terminalBalances.forEach { terminal ->
+                        FilterChip(
+                            selected = selectedTerminalId == terminal.terminalId,
+                            onClick = { viewModel.filterByTerminal(terminal.terminalId) },
+                            label = { Text(terminal.terminalName) }
+                        )
+                    }
+                }
+            }
+
+            // LADO DERECHO: ACCIÓN
+            Surface(modifier = Modifier.weight(0.8f).fillMaxHeight(), color = Color.White, shadowElevation = 8.dp) {
+                Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("ARQUEO DE CAJA", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.height(32.dp))
+
+                    OutlinedTextField(
+                        value = countedAmountText,
+                        onValueChange = { if(it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) countedAmountText = it },
+                        label = { Text("Monto Contado en Caja") },
+                        modifier = Modifier.fillMaxWidth(),
+                        prefix = { Text("$ ") },
+                        textStyle = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Black, textAlign = TextAlign.Center),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+
+                    Spacer(Modifier.height(32.dp))
+
+                    val counted = countedAmountText.toDoubleOrNull() ?: 0.0
+                    val diff = counted - expectedAmount
+
+                    if (countedAmountText.isNotEmpty()) {
+                        Surface(
+                            color = if(diff >= 0) Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(if(diff >= 0) "SOBRANTE" else "FALTANTE", fontWeight = FontWeight.Bold, color = if(diff >= 0) Color(0xFF2E7D32) else Color.Red)
+                                Text("$${abs(diff).formatPrice()}", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = if(diff >= 0) Color(0xFF2E7D32) else Color.Red)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    Button(
+                        onClick = { 
+                            viewModel.saveCashOut(
+                                countedAmount = counted,
+                                expectedAmount = expectedAmount,
+                                ticketCount = pendingSales.size,
+                                currentUserId = currentUser?.username ?: "admin",
+                                onDone = onNavigateToPos
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth().height(64.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        enabled = countedAmountText.isNotEmpty()
+                    ) {
+                        Icon(Icons.Default.Check, null)
+                        Spacer(Modifier.width(12.dp))
+                        Text("REALIZAR CORTE FINAL", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

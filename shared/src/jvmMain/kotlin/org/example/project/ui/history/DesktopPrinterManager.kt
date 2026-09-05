@@ -258,6 +258,8 @@ class DesktopPrinterManager : PrinterManager {
             sendEscPos { 
                 it.write(getDrawerCommandBytes())
             }
+        } else if (connectionType == "SYSTEM") {
+            sendRawToSystemPrinter(getDrawerCommandBytes())
         } else {
             println("Desktop: Abriendo cajón en $printerName")
         }
@@ -273,8 +275,31 @@ class DesktopPrinterManager : PrinterManager {
                     it.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
                 }
             }
+        } else if (connectionType == "SYSTEM") {
+            val test = "\n\n   PRUEBA DE IMPRESION\n   SISTEMA POS DESKTOP (DRIVER)\n   CONEXION: OK\n\n\n\n"
+            var bytes = test.toByteArray(Charsets.US_ASCII)
+            if (autoCut) {
+                bytes += byteArrayOf(0x1D, 0x56, 0x42, 0x00)
+            }
+            sendRawToSystemPrinter(bytes)
         } else {
             println("Desktop: Prueba a $printerName")
+        }
+    }
+
+    private fun sendRawToSystemPrinter(bytes: ByteArray) {
+        if (printerName.isBlank()) return
+        try {
+            val services = javax.print.PrintServiceLookup.lookupPrintServices(null, null)
+            val selectedService = services.find { it.name == printerName } ?: return
+            
+            val docFlavor = javax.print.DocFlavor.BYTE_ARRAY.AUTOSENSE
+            val doc = javax.print.SimpleDoc(bytes, docFlavor, null)
+            val job = selectedService.createPrintJob()
+            job.print(doc, null)
+            
+        } catch (e: Exception) {
+            println("Desktop: Error raw SYSTEM: ${e.message}")
         }
     }
 

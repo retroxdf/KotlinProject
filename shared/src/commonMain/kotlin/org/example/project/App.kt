@@ -262,6 +262,8 @@ fun AppContent() {
                                 Key.F3 -> if (!isDialogSubScreen && currentScreen != "products" && (userPermissions[Permission.PRODUCT_VIEW] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { prodVM.resetToCatalog(); currentScreen = "products"; true } else false
                                 Key.F4 -> if (currentScreen != "checkout" && currentScreen != "purchases" && (userPermissions[Permission.MANAGE_PURCHASES] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { currentScreen = "purchases"; true } else false
                                 Key.F5 -> if (!isDialogSubScreen && (userPermissions[Permission.PRODUCT_VIEW] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { currentScreen = "inventory"; true } else false
+                                Key.F6 -> if (!isDialogSubScreen && (userPermissions[Permission.MANAGE_CASH_MOVEMENTS] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { posViewModel.openCashMovementDialog(CashMovementType.IN); true } else false
+                                Key.F7 -> if (!isDialogSubScreen && (userPermissions[Permission.MANAGE_CASH_MOVEMENTS] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { posViewModel.openCashMovementDialog(CashMovementType.OUT); true } else false
                                 Key.F8 -> if (!isDialogSubScreen && (userPermissions[Permission.VIEW_REPORTS] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { currentScreen = "history"; true } else false
                                 Key.F10 -> if (!isDialogSubScreen && (currentUser?.role == Role.SUPER_ADMIN || (userPermissions[Permission.MANAGE_SETTINGS] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED)) { currentScreen = "settings"; true } else false
                                 Key.F11 -> if (!isDialogSubScreen && (userPermissions[Permission.PERFORM_CASH_OUT] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { currentScreen = "cash_out"; true } else false
@@ -360,6 +362,16 @@ fun AppContent() {
                             }
                         ) { padding ->
                             Surface(modifier = Modifier.padding(padding)) {
+                                val showCashMovementDialog by posViewModel.showCashMovementDialog.collectAsState()
+                                if (showCashMovementDialog != null) {
+                                    CashMovementDialog(posViewModel, type = showCashMovementDialog!!)
+                                }
+
+                                val showPreCutDialog by posViewModel.showPreCutDialog.collectAsState()
+                                if (showPreCutDialog) {
+                                    PreCutDialog(posViewModel, currentUserId = currentUser?.username ?: "admin")
+                                }
+
                                 when (currentScreen) {
                                     "dashboard" -> DashboardScreen(dashboardViewModel)
                                     "pos" -> {
