@@ -1049,10 +1049,13 @@ class PosViewModel(
 
     // --- Checkout y Métodos de Venta ---
     fun updateAmountPaid(text: TextFieldValue) {
+        if (_showSaleSuccessOverlay.value) return // Evitar recálculos si la venta ya finalizó
+        
         if (text.text.isEmpty() || text.text.all { it.isDigit() || it == '.' }) {
             _amountPaidText.value = text
             val amount = text.text.toDoubleOrNull() ?: 0.0
-            _saleChange.value = amount - currentSaleManager.total.value
+            val currentTotal = currentSaleManager.total.value
+            _saleChange.value = if (amount > currentTotal) amount - currentTotal else 0.0
         }
     }
 
@@ -1258,9 +1261,9 @@ class PosViewModel(
                 val now = currentTimeMillis()
                 val saleId = saleRepository.generateUniqueSaleId(branchId, _selectedTerminal.value?.id, prefix = _ticketConfig.value.ticketIdPrefix)
                 
-                // Aseguramos que el cambio se calcule con los valores estáticos capturados al inicio
-                val diff = amountPaid - currentTotal
-                val finalChange = if (paymentMethod == "Efectivo" && diff > 0.001) diff else 0.0
+                // Cálculo estático y blindado del cambio final
+                val finalDiff = amountPaid - currentTotal
+                val calculatedChange = if (paymentMethod == "Efectivo" && finalDiff > 0.005) finalDiff else 0.0
 
                 val sale = Sale(
                     id = saleId,
@@ -1275,17 +1278,21 @@ class PosViewModel(
                     cashAmount = if (paymentMethod == "Efectivo") currentTotal else 0.0,
                     creditAmount = if (isCredit) currentTotal else 0.0,
                     receivedAmount = if (paymentMethod == "Efectivo") amountPaid else currentTotal,
-                    changeAmount = finalChange,
+                    changeAmount = calculatedChange,
                     paymentMethod = paymentMethod,
                     comment = _saleComment.value,
                     originalWebOrderId = currentSaleManager.currentWebOrderId.value
                 )
 
-                
                 saleRepository.saveSale(sale)
                 
-                _saleChange.value = finalChange
+                // IMPORTANTE: Primero establecemos el cambio y mostramos el overlay
+                _saleChange.value = calculatedChange
                 _showSaleSuccessOverlay.value = true
+                
+                // Limpiar la venta (Esto ya no sobreescribirá _saleChange porque lo bloqueamos arriba)
+                clearSale(isManual = false)
+                
                 successJob?.cancel()
                 successJob = viewModelScope.launch {
                     delay(120000) // Esperar 2 minutos
@@ -1378,7 +1385,6 @@ class PosViewModel(
                     _showCardSuccess.value = true
                 }
 
-                clearSale(isManual = false)
                 onDone()
             } catch (e: Exception) {
                 setErrorMessage("Error al procesar venta: ${e.message}")
@@ -1728,6 +1734,7 @@ class PosViewModel(
         val action = {
             currentSaleManager.clear()
             _searchQuery.value = TextFieldValue("")
+            _amountPaidText.value = TextFieldValue("") // Limpiar monto pagado
             _selectedCustomer.value = null
             _saleComment.value = ""
             currentMpIdempotencyKey = null
