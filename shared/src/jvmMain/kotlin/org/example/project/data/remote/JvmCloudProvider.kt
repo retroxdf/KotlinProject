@@ -431,6 +431,19 @@ class JvmCloudProvider : CloudProvider {
     suspend fun fetchCustomersIncremental(since: Long): List<Customer> = queryIncremental("customers", since).map { Json.decodeFromJsonElement(it) }
 
     override suspend fun fetchTerminals(branchId: String): List<PosTerminal> = queryDocuments("terminals", branchId).map { Json.decodeFromJsonElement(it) }
+
+    override suspend fun fetchLatestUpdateInfo(): AppUpdateInfo? {
+        return try {
+            val url = "$baseUrl/global_config/desktop_update"
+            val response: JsonObject = httpClient.get(url) { authHeader() }.body()
+            if (response.containsKey("fields")) {
+                Json.decodeFromJsonElement<AppUpdateInfo>(response.fromFirestoreFields())
+            } else null
+        } catch (e: Exception) {
+            println("CLOUD_JVM_UPDATE_FETCH_ERROR: ${e.message}")
+            null
+        }
+    }
     
     private suspend fun queryIncremental(collection: String, since: Long, branchId: String? = null): List<JsonObject> {
         return try {

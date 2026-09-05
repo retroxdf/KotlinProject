@@ -249,6 +249,8 @@ class FirebaseManager {
     suspend fun fetchAttendance(userId: String) = cloudProvider.fetchAttendance(userId)
     suspend fun fetchSchedules(employeeId: Long) = cloudProvider.fetchSchedules(employeeId)
     suspend fun fetchEmployees() = cloudProvider.fetchEmployees()
+    
+    suspend fun fetchLatestUpdateInfo() = cloudProvider.fetchLatestUpdateInfo()
 
     suspend fun fetchUsers() = cloudProvider.fetchUsers()
     suspend fun fetchBranches() = cloudProvider.fetchBranches()

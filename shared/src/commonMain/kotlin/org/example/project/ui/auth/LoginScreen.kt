@@ -70,7 +70,7 @@ fun LoginScreen(viewModel: AuthViewModel, logoUrl: String) {
             Text("Selecciona tu usuario para ingresar", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
             
             Spacer(modifier = Modifier.height(4.dp))
-            Text("Versión 1.0.3", style = MaterialTheme.typography.labelSmall, color = Color.Gray.copy(alpha = 0.6f))
+            Text("Versión 1.0.6", style = MaterialTheme.typography.labelSmall, color = Color.Gray.copy(alpha = 0.6f))
             
             Spacer(modifier = Modifier.height(44.dp))
 

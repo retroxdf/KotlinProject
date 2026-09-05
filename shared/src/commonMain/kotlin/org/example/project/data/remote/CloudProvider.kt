@@ -5,6 +5,7 @@ import com.abtsplazita.posplazita.domain.Sale
 import com.abtsplazita.posplazita.domain.Customer
 import com.abtsplazita.posplazita.domain.User
 import com.abtsplazita.posplazita.domain.StockMovement
+import com.abtsplazita.posplazita.domain.AppUpdateInfo
 import com.abtsplazita.posplazita.domain.Branch
 import com.abtsplazita.posplazita.domain.PosTerminal
 import com.abtsplazita.posplazita.domain.HeldSale
@@ -105,6 +106,8 @@ interface CloudProvider {
     suspend fun fetchAttendance(userId: String): List<AttendanceRecord>
     suspend fun fetchSchedules(employeeId: Long): List<Schedule>
     suspend fun fetchEmployees(): List<Employee>
+    
+    suspend fun fetchLatestUpdateInfo(): AppUpdateInfo?
 }
 
 expect fun getCloudProvider(): CloudProvider

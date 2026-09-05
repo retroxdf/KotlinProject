@@ -668,3 +668,13 @@ data class TicketConfig(
         )
     }
 }
+
+@Serializable
+data class AppUpdateInfo(
+    val version: String,
+    val downloadUrl: String,
+    val releaseNotes: String? = null,
+    val forceUpdate: Boolean = false,
+    val timestamp: Long = 0L
+)
+

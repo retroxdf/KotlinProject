@@ -11,6 +11,7 @@ import com.abtsplazita.posplazita.domain.Sale
 import com.abtsplazita.posplazita.domain.Customer
 import com.abtsplazita.posplazita.domain.User
 import com.abtsplazita.posplazita.domain.StockMovement
+import com.abtsplazita.posplazita.domain.AppUpdateInfo
 import com.abtsplazita.posplazita.domain.Branch
 import com.abtsplazita.posplazita.domain.PosTerminal
 import com.abtsplazita.posplazita.domain.HeldSale
@@ -682,6 +683,13 @@ class AndroidCloudProvider : CloudProvider {
                 try { it.data(Employee.serializer()) } catch (e: Exception) { null }
             }
         } catch (e: Exception) { emptyList() }
+    }
+
+    override suspend fun fetchLatestUpdateInfo(): com.abtsplazita.posplazita.domain.AppUpdateInfo? {
+        return try {
+            val doc = firestore.collection("global_config").document("desktop_update").get()
+            if (doc.exists) doc.data(com.abtsplazita.posplazita.domain.AppUpdateInfo.serializer()) else null
+        } catch (e: Exception) { null }
     }
 }
 

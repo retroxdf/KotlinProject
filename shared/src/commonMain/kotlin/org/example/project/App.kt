@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -109,9 +110,11 @@ fun AppContent() {
     val currentSaleManager = remember { CurrentSaleManager(settingsRepository, globalScope) }
     
     val syncManager = remember { SyncManager(saleRepository, cashMovementRepository, productRepository, branchRepository, userRepository, employeeRepository, customerRepository, settingsRepository, globalScope) }
+    val updateViewModel = remember { UpdateViewModel() }
     
     LaunchedEffect(Unit) {
         syncManager.startAutoSync()
+        updateViewModel.checkForUpdates()
     }
     
     val authViewModel = remember { AuthViewModel(userRepository, employeeRepository, permissionRepository, settingsRepository) }
@@ -323,7 +326,7 @@ fun AppContent() {
                                     
                                     Spacer(Modifier.height(16.dp))
                                     Text(
-                                        text = "v1.0.3",
+                                        text = "v1.0.6",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.Gray.copy(alpha = 0.5f),
                                         modifier = Modifier.padding(bottom = 8.dp)
@@ -401,6 +404,12 @@ fun AppContent() {
                     }
                 }
                 LaunchedEffect(currentScreen) { mainFocusRequester.requestFocus() }
+            }
+
+            // Diálogo de Actualización
+            val updateInfo by updateViewModel.updateInfo.collectAsState()
+            if (updateInfo != null) {
+                UpdateDialog(updateViewModel)
             }
 
             if (isCompact) {
@@ -684,3 +693,57 @@ fun IncomeRow(label: String, value: String, isBold: Boolean = false, color: Colo
         Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = if(isBold) FontWeight.Black else FontWeight.Bold, color = color)
     }
 }
+
+@Composable
+fun UpdateDialog(viewModel: com.abtsplazita.posplazita.ui.UpdateViewModel) {
+    val info by viewModel.updateInfo.collectAsState()
+    val isDownloading by viewModel.isDownloading.collectAsState()
+    val progress by viewModel.downloadProgress.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    if (info == null) return
+
+    AlertDialog(
+        onDismissRequest = { if (!info!!.forceUpdate && !isDownloading) viewModel.dismissUpdate() },
+        title = { Text("Actualización Disponible (v${info!!.version})", fontWeight = FontWeight.Black) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (!info!!.releaseNotes.isNullOrBlank()) {
+                    Text("Novedades:", fontWeight = FontWeight.Bold)
+                    Text(info!!.releaseNotes!!, style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    Text("Hay una nueva versión del sistema disponible para descargar e instalar.")
+                }
+
+                if (isDownloading) {
+                    Spacer(Modifier.height(16.dp))
+                    Text("Descargando actualización... ${(progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+                    )
+                }
+
+                if (error != null) {
+                    Text(error!!, color = Color.Red, style = MaterialTheme.typography.labelSmall)
+                    Button(onClick = { viewModel.clearError() }) { Text("REINTENTAR") }
+                }
+            }
+        },
+        confirmButton = {
+            if (!isDownloading) {
+                Button(onClick = { viewModel.startUpdate() }) {
+                    Text("ACTUALIZAR AHORA")
+                }
+            }
+        },
+        dismissButton = {
+            if (!info!!.forceUpdate && !isDownloading) {
+                TextButton(onClick = { viewModel.dismissUpdate() }) {
+                    Text("MÁS TARDE")
+                }
+            }
+        }
+    )
+}
+

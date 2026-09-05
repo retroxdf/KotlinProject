@@ -11,7 +11,7 @@ fun main() = application {
 
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Plazita POS v1.0.3",
+        title = "Plazita POS v1.0.6",
         state = windowState
     ) {
         App()
