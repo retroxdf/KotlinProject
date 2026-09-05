@@ -128,6 +128,10 @@ fun ConsultasDashboard(
                 Text("Centro de Consultas", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
                 Text("Resumen de saldos por caja", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
+            
+            HistoryPeriodSelector(viewModel)
+            Spacer(Modifier.width(8.dp))
+            
             if (isRefreshing) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
             } else {
@@ -322,7 +326,8 @@ fun SupplierPaymentsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Uni
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("Pagos a Proveedores", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Pagos a Proveedores", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            HistoryPeriodSelector(viewModel)
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
             items(payments) { pay ->
@@ -339,15 +344,59 @@ fun SupplierPaymentsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Uni
 }
 
 @Composable
+fun HistoryPeriodSelector(viewModel: HistoryViewModel) {
+    val currentPeriod by viewModel.period.collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+
+    val options = listOf(
+        HistoryPeriod.TODAY to "Hoy",
+        HistoryPeriod.YESTERDAY to "Ayer",
+        HistoryPeriod.LAST_7_DAYS to "Últimos 7 días",
+        HistoryPeriod.MONTH_ACTUAL to "Mes Actual",
+        HistoryPeriod.MONTH_PREVIOUS to "Mes Anterior",
+        HistoryPeriod.CUSTOM to "Personalizado..."
+    )
+
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Icon(Icons.Default.DateRange, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(options.find { it.first == currentPeriod }?.second ?: "Seleccionar Periodo")
+            Icon(Icons.Default.ArrowDropDown, null)
+        }
+
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (p, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        viewModel.setPeriod(p)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun SalesHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
     val sales by viewModel.sales.collectAsState()
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("Historial de Ventas", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Historial de Ventas", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            
+            HistoryPeriodSelector(viewModel)
+            Spacer(Modifier.width(8.dp))
+            IconButton(onClick = { viewModel.refreshDashboardData() }) { Icon(Icons.Default.Refresh, null) }
         }
         LazyColumn(modifier = Modifier.weight(1f).padding(top = 8.dp)) {
-            items(sales) { sale ->
+            items(sales.sortedByDescending { it.timestamp }) { sale ->
                 ListItem(
                     headlineContent = { Text("TICKET: ${sale.id}", fontWeight = FontWeight.Bold) },
                     supportingContent = { Text(formatTimestamp(sale.timestamp)) },
@@ -368,7 +417,8 @@ fun PurchasesHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("Historial de Compras", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Historial de Compras", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            HistoryPeriodSelector(viewModel)
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
             items(purchases) { p ->
@@ -730,7 +780,8 @@ fun CashMovementsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("Movimientos de Caja", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Movimientos de Caja", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            HistoryPeriodSelector(viewModel)
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
             items(movs) { m ->
@@ -752,7 +803,8 @@ fun PreCutsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("Historial de Precortes", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Historial de Precortes", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            HistoryPeriodSelector(viewModel)
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
             items(pcs) { pc ->
@@ -773,7 +825,8 @@ fun WithdrawalsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("Reporte de Retiros", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Reporte de Retiros", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            HistoryPeriodSelector(viewModel)
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
             items(ws) { m ->
@@ -794,7 +847,8 @@ fun DeletionLogsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("Tickets Borrados", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Tickets Borrados", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            HistoryPeriodSelector(viewModel)
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
             items(logs) { log ->
@@ -958,7 +1012,8 @@ fun ProductReturnsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit)
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-            Text("Cambios y Devoluciones", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Cambios y Devoluciones", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            HistoryPeriodSelector(viewModel)
         }
         
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {

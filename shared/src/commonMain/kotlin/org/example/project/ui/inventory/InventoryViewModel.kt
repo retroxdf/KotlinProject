@@ -51,7 +51,7 @@ class InventoryViewModel(
     }
 
     private var currentOffset = 0
-    private val limit = 50
+    private val limit = 30
     private var hasMore = true
 
     // --- Ajuste de Inventario ---
@@ -90,6 +90,10 @@ class InventoryViewModel(
         loadJob = viewModelScope.launch {
             try {
                 _isLoading.value = true
+                
+                // Cargar stock desde la nube para esta página bajo demanda
+                repository.refreshInventoryPaged(branchId, limit, currentOffset)
+                
                 val queryText = _searchQuery.value.text
                 val products = if (queryText.isBlank()) {
                     repository.getProductsPaginated(limit, currentOffset).first()

@@ -440,6 +440,19 @@ class PosViewModel(
     fun selectCustomer(customer: Customer?) {
         _selectedCustomer.value = customer
         closeCustomerDialog()
+        
+        // Bajo demanda: Actualizar saldo y monedero desde la nube
+        if (customer != null) {
+            viewModelScope.launch {
+                try {
+                    customerRepository?.refreshCustomer(customer.id)?.let { refreshed ->
+                        if (_selectedCustomer.value?.id == refreshed.id) {
+                            _selectedCustomer.value = refreshed
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+        }
     }
 
     fun openAddCustomerDialog() { 

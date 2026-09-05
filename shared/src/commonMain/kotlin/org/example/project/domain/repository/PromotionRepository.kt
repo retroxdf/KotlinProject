@@ -19,8 +19,18 @@ class PromotionRepository(
     }
 
     suspend fun savePromotion(promotion: Promotion) {
-        promotionDao.insertPromotion(promotion.toEntity())
-        // firebaseManager?.syncPromotion(promotion) // TODO: Implementar si se requiere sync
+        val updated = promotion.copy(lastUpdated = com.abtsplazita.posplazita.currentTimeMillis())
+        promotionDao.insertPromotion(updated.toEntity())
+        firebaseManager?.syncPromotion(updated)
+    }
+
+    suspend fun refreshPromotions() {
+        println("PROMO_REPO: Sincronizando promociones desde la nube...")
+        val cloudPromos = firebaseManager?.fetchPromotions() ?: emptyList()
+        if (cloudPromos.isNotEmpty()) {
+            cloudPromos.forEach { promotionDao.insertPromotion(it.toEntity()) }
+            println("PROMO_REPO: Promociones actualizadas (${cloudPromos.size}).")
+        }
     }
 
     suspend fun deletePromotion(promotion: Promotion) {

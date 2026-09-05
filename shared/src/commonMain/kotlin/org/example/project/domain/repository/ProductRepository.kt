@@ -56,11 +56,24 @@ class ProductRepository(
         val current = getCategories().first()
         if (current.any { it.equals(trimmed, ignoreCase = true) }) return
 
-        categoryDao?.insertCategory(CategoryEntity("CAT_${com.abtsplazita.posplazita.currentTimeMillis()}", trimmed))
+        val category = Category(
+            id = "CAT_${com.abtsplazita.posplazita.currentTimeMillis()}", 
+            name = trimmed,
+            lastUpdated = com.abtsplazita.posplazita.currentTimeMillis()
+        )
+        categoryDao?.insertCategory(CategoryEntity(category.id, category.name))
+        firebaseManager?.syncCategory(category)
     }
 
     suspend fun addTax(rate: Double) {
-        taxDao?.insertTax(TaxEntity("TAX_${com.abtsplazita.posplazita.currentTimeMillis()}", "${rate}%", rate))
+        val tax = Tax(
+            id = "TAX_${com.abtsplazita.posplazita.currentTimeMillis()}", 
+            name = "${rate}%", 
+            rate = rate,
+            lastUpdated = com.abtsplazita.posplazita.currentTimeMillis()
+        )
+        taxDao?.insertTax(TaxEntity(tax.id, tax.name, tax.rate))
+        firebaseManager?.syncTax(tax)
     }
 
     suspend fun getProductByBarcode(barcode: String): Product? {
@@ -215,6 +228,18 @@ class ProductRepository(
             println("PRODUCT_REPO: Existencias actualizadas (${cloudInventory.size} registros).")
         } else {
             println("PRODUCT_REPO: Existencias ya están al día.")
+        }
+    }
+
+    suspend fun refreshInventoryPaged(branchId: String, limit: Int, offset: Int) {
+        println("PRODUCT_REPO: Cargando página de inventario ($limit) para sucursal $branchId...")
+        try {
+            val cloudInventory = firebaseManager?.fetchInventoryPaged(branchId, limit, offset) ?: emptyList()
+            cloudInventory.forEach { inv ->
+                inventoryDao.updateInventory(inv.toEntity())
+            }
+        } catch (e: Exception) {
+            println("PRODUCT_REPO_PAGING_ERROR: ${e.message}")
         }
     }
 

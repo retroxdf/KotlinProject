@@ -384,8 +384,47 @@ class JvmCloudProvider : CloudProvider {
 
     override fun syncAiConfig(enabled: Boolean) {}
 
-    override fun syncGlobalAds(urls: List<String>) {}
-    override fun observeGlobalAds(onUpdate: (List<String>) -> Unit) {}
+    override fun syncGlobalAds(urls: List<String>) {
+        scope.launch { patchDocument("global_config", "ads", buildJsonObject {
+            put("urls", urls.joinToString("|"))
+        }) }
+    }
+    
+    override fun syncPurchase(purchase: Purchase) {
+        scope.launch { patchDocument("purchases", purchase.id, Json.encodeToJsonElement(purchase).jsonObject) }
+    }
+    override fun syncSupplier(supplier: Supplier) {
+        scope.launch { patchDocument("suppliers", supplier.id, Json.encodeToJsonElement(supplier).jsonObject) }
+    }
+    override fun syncPromotion(promotion: Promotion) {
+        scope.launch { patchDocument("promotions", promotion.id, Json.encodeToJsonElement(promotion).jsonObject) }
+    }
+    override fun syncCategory(category: Category) {
+        scope.launch { patchDocument("categories", category.id, Json.encodeToJsonElement(category).jsonObject) }
+    }
+    override fun syncTax(tax: Tax) {
+        scope.launch { patchDocument("taxes", tax.id, Json.encodeToJsonElement(tax).jsonObject) }
+    }
+    override fun syncSupplierPayment(payment: SupplierPayment) {
+        scope.launch { patchDocument("supplier_payments", payment.id, Json.encodeToJsonElement(payment).jsonObject) }
+    }
+
+    override fun observeGlobalAds(onUpdate: (List<String>) -> Unit) {
+        scope.launch {
+            while(true) {
+                try {
+                    val url = "$baseUrl/global_config/ads"
+                    val response: JsonObject = httpClient.get(url) { authHeader() }.body()
+                    if (response.containsKey("fields")) {
+                        val fields = response.fromFirestoreFields()
+                        val urlsStr = fields["urls"]?.jsonPrimitive?.content ?: ""
+                        onUpdate(if (urlsStr.isBlank()) emptyList() else urlsStr.split("|"))
+                    }
+                } catch (e: Exception) {}
+                delay(PULSE_SLOW)
+            }
+        }
+    }
 
     override suspend fun fetchProducts(): List<Product> = listDocuments("products").map { Json.decodeFromJsonElement(it) }
     override suspend fun fetchProductsIncremental(since: Long): List<Product> = queryIncremental("products", since).map { Json.decodeFromJsonElement(it) }
@@ -402,6 +441,35 @@ class JvmCloudProvider : CloudProvider {
     
     override suspend fun fetchInventory(branchId: String): List<Inventory> = queryDocuments("inventory", branchId).map { Json.decodeFromJsonElement(it) }
     override suspend fun fetchInventoryIncremental(branchId: String, since: Long): List<Inventory> = queryIncremental("inventory", since, branchId).map { Json.decodeFromJsonElement(it) }
+    
+    override suspend fun fetchInventoryPaged(branchId: String, limit: Int, offset: Int): List<Inventory> = 
+        queryIncremental("inventory", 0, branchId, limit, offset).map { Json.decodeFromJsonElement(it) }
+
+    override suspend fun fetchPurchases(branchId: String): List<Purchase> = queryDocuments("purchases", branchId).map { Json.decodeFromJsonElement(it) }
+    override suspend fun fetchPurchasesIncremental(branchId: String, since: Long): List<Purchase> = queryIncremental("purchases", since, branchId).map { Json.decodeFromJsonElement(it) }
+    
+    override suspend fun fetchSuppliers(): List<Supplier> = listDocuments("suppliers").map { Json.decodeFromJsonElement(it) }
+    override suspend fun fetchPromotions(): List<Promotion> = listDocuments("promotions").map { Json.decodeFromJsonElement(it) }
+    override suspend fun fetchCategories(): List<Category> = listDocuments("categories").map { Json.decodeFromJsonElement(it) }
+    override suspend fun fetchTaxes(): List<Tax> = listDocuments("taxes").map { Json.decodeFromJsonElement(it) }
+
+    override suspend fun fetchSalesPaged(branchId: String, limit: Int, offset: Int, start: Long?, end: Long?): List<Sale> {
+        return queryIncremental("sales", 0, branchId, limit, offset).map { Json.decodeFromJsonElement<Sale>(it) }
+            .filter { (start == null || it.timestamp >= start) && (end == null || it.timestamp <= end) }
+    }
+
+    override suspend fun fetchTopSellingProducts(branchId: String, limit: Int): List<Pair<String, Double>> {
+        // Por ahora traemos las últimas ventas y agrupamos (limitado para no saturar)
+        val recentSales = queryIncremental("sales", 0, branchId, limit = 50).map { Json.decodeFromJsonElement<Sale>(it) }
+        return recentSales.flatMap { it.items }
+            .filter { !it.productId.startsWith("COMMON_") }
+            .groupBy { it.productId }
+            .map { (id, items) -> 
+                (items.firstOrNull()?.productName ?: "Prod #$id") to items.sumOf { item -> item.quantity } 
+            }
+            .sortedByDescending { it.second }
+            .take(limit)
+    }
 
     override suspend fun fetchAttendance(userId: String): List<AttendanceRecord> {
         return queryDocuments("attendance").mapNotNull { 
@@ -428,7 +496,7 @@ class JvmCloudProvider : CloudProvider {
     suspend fun fetchBranchesIncremental(since: Long): List<Branch> = queryIncremental("branches", since).map { Json.decodeFromJsonElement(it) }
 
     override suspend fun fetchCustomers(): List<Customer> = listDocuments("customers").map { Json.decodeFromJsonElement(it) }
-    suspend fun fetchCustomersIncremental(since: Long): List<Customer> = queryIncremental("customers", since).map { Json.decodeFromJsonElement(it) }
+    override suspend fun fetchCustomersIncremental(since: Long): List<Customer> = queryIncremental("customers", since).map { Json.decodeFromJsonElement(it) }
 
     override suspend fun fetchTerminals(branchId: String): List<PosTerminal> = queryDocuments("terminals", branchId).map { Json.decodeFromJsonElement(it) }
 
@@ -445,7 +513,13 @@ class JvmCloudProvider : CloudProvider {
         }
     }
     
-    private suspend fun queryIncremental(collection: String, since: Long, branchId: String? = null): List<JsonObject> {
+    private suspend fun queryIncremental(
+        collection: String, 
+        since: Long, 
+        branchId: String? = null,
+        limit: Int? = null,
+        offset: Int? = null
+    ): List<JsonObject> {
         return try {
             val url = "$baseUrl:runQuery"
             val response: JsonArray = httpClient.post(url) {
@@ -457,13 +531,15 @@ class JvmCloudProvider : CloudProvider {
                         
                         val filters = mutableListOf<JsonObject>()
                         
-                        filters.add(buildJsonObject {
-                            put("fieldFilter", buildJsonObject {
-                                put("field", buildJsonObject { put("fieldPath", "lastUpdated") })
-                                put("op", "GREATER_THAN")
-                                put("value", buildJsonObject { put("integerValue", since) })
+                        if (since > 0) {
+                            filters.add(buildJsonObject {
+                                put("fieldFilter", buildJsonObject {
+                                    put("field", buildJsonObject { put("fieldPath", "lastUpdated") })
+                                    put("op", "GREATER_THAN")
+                                    put("value", buildJsonObject { put("integerValue", since) })
+                                })
                             })
-                        })
+                        }
                         
                         if (branchId != null) {
                             filters.add(buildJsonObject {
@@ -475,16 +551,29 @@ class JvmCloudProvider : CloudProvider {
                             })
                         }
                         
-                        if (filters.size > 1) {
-                            put("where", buildJsonObject {
-                                put("compositeFilter", buildJsonObject {
-                                    put("op", "AND")
-                                    put("filters", buildJsonArray { filters.forEach { add(it) } })
+                        if (filters.isNotEmpty()) {
+                            if (filters.size > 1) {
+                                put("where", buildJsonObject {
+                                    put("compositeFilter", buildJsonObject {
+                                        put("op", "AND")
+                                        put("filters", buildJsonArray { filters.forEach { add(it) } })
+                                    })
                                 })
-                            })
-                        } else {
-                            put("where", filters[0])
+                            } else {
+                                put("where", filters[0])
+                            }
                         }
+
+                        if (limit != null) put("limit", limit)
+                        if (offset != null) put("offset", offset)
+                        
+                        // Ordenar por lastUpdated para que el offset tenga sentido
+                        put("orderBy", buildJsonArray {
+                            add(buildJsonObject {
+                                put("field", buildJsonObject { put("fieldPath", "lastUpdated") })
+                                put("direction", "DESCENDING")
+                            })
+                        })
                     })
                 })
             }.body()

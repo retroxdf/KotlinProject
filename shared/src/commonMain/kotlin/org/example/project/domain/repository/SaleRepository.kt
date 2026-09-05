@@ -151,4 +151,8 @@ class SaleRepository(
         // Modo tiempo real deshabilitado para ahorrar datos.
         // Se usa carga bajo demanda en reportes.
     }
+
+    suspend fun getTopSellingProducts(branchId: String, limit: Int): List<Pair<String, Double>> {
+        return firebaseManager?.fetchTopSellingProducts(branchId, limit) ?: emptyList()
+    }
 }

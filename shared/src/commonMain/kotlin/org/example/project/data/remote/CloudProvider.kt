@@ -87,10 +87,18 @@ interface CloudProvider {
 
     fun syncGlobalAds(urls: List<String>)
     fun observeGlobalAds(onUpdate: (List<String>) -> Unit)
+    
+    fun syncPurchase(purchase: com.abtsplazita.posplazita.domain.Purchase)
+    fun syncSupplier(supplier: com.abtsplazita.posplazita.domain.Supplier)
+    fun syncPromotion(promotion: com.abtsplazita.posplazita.domain.Promotion)
+    fun syncCategory(category: com.abtsplazita.posplazita.domain.Category)
+    fun syncTax(tax: com.abtsplazita.posplazita.domain.Tax)
+    fun syncSupplierPayment(payment: com.abtsplazita.posplazita.domain.SupplierPayment)
 
     suspend fun fetchProducts(): List<Product>
     suspend fun fetchProductsIncremental(since: Long): List<Product>
     suspend fun fetchSales(branchId: String): List<Sale>
+    suspend fun fetchSalesPaged(branchId: String, limit: Int, offset: Int, start: Long?, end: Long?): List<Sale>
     suspend fun fetchCashOuts(branchId: String): List<com.abtsplazita.posplazita.domain.CashOut>
     suspend fun fetchCashMovements(branchId: String): List<com.abtsplazita.posplazita.domain.CashMovement>
     suspend fun fetchPreCuts(branchId: String): List<com.abtsplazita.posplazita.domain.PreCut>
@@ -100,12 +108,23 @@ interface CloudProvider {
     suspend fun fetchUsers(): List<User>
     suspend fun fetchBranches(): List<Branch>
     suspend fun fetchCustomers(): List<Customer>
+    suspend fun fetchCustomersIncremental(since: Long): List<Customer>
     suspend fun fetchTerminals(branchId: String): List<PosTerminal>
     suspend fun fetchInventory(branchId: String): List<Inventory>
+    suspend fun fetchInventoryPaged(branchId: String, limit: Int, offset: Int): List<Inventory>
     suspend fun fetchInventoryIncremental(branchId: String, since: Long): List<Inventory>
     suspend fun fetchAttendance(userId: String): List<AttendanceRecord>
     suspend fun fetchSchedules(employeeId: Long): List<Schedule>
     suspend fun fetchEmployees(): List<Employee>
+    
+    suspend fun fetchPurchases(branchId: String): List<com.abtsplazita.posplazita.domain.Purchase>
+    suspend fun fetchPurchasesIncremental(branchId: String, since: Long): List<com.abtsplazita.posplazita.domain.Purchase>
+    suspend fun fetchSuppliers(): List<com.abtsplazita.posplazita.domain.Supplier>
+    suspend fun fetchPromotions(): List<com.abtsplazita.posplazita.domain.Promotion>
+    suspend fun fetchCategories(): List<com.abtsplazita.posplazita.domain.Category>
+    suspend fun fetchTaxes(): List<com.abtsplazita.posplazita.domain.Tax>
+    
+    suspend fun fetchTopSellingProducts(branchId: String, limit: Int): List<Pair<String, Double>>
     
     suspend fun fetchLatestUpdateInfo(): AppUpdateInfo?
 }

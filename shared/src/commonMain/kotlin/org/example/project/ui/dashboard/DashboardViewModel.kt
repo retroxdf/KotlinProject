@@ -33,16 +33,24 @@ class DashboardViewModel(
         MutableStateFlow(emptyList())
     }
 
-    fun setPeriod(p: DashboardPeriod) { _period.value = p }
-    fun selectTerminal(id: String?) { _selectedTerminalId.value = id }
+    fun setPeriod(p: DashboardPeriod) { 
+        _period.value = p 
+        refreshTop30()
+    }
+    fun selectTerminal(id: String?) { 
+        _selectedTerminalId.value = id 
+        refreshTop30()
+    }
+
+    private val _topProducts = MutableStateFlow<List<Pair<String, Double>>>(emptyList())
+    val topProducts = _topProducts.asStateFlow()
 
     val dashboardData = combine(
         saleRepository.getSalesWithItems(branchId),
         expenseRepository.getExpenses(branchId),
-        productRepository.getProducts(),
         _period,
         _selectedTerminalId
-    ) { sales, expenses, allProducts, p, terminalId ->
+    ) { sales, expenses, p, terminalId ->
         val now = currentTimeMillis()
         val startOfPeriod = getStartOfPeriod(p, now)
         
@@ -55,28 +63,38 @@ class DashboardViewModel(
         val totalExpenses = filteredExpenses.sumOf { it.amount }
         val netProfit = totalSales - totalExpenses
         
-        // Optimización: Usar mapa para búsqueda de nombres de productos
-        val productMap = allProducts.associateBy { it.id }
-        
-        // Top 30 productos vendidos
-        val topProducts = filteredSales.flatMap { it.items }
-            .filter { !it.productId.startsWith("COMMON_") } // Excluir Producto Común
-            .groupBy { it.productId }
-            .map { (id, items) -> 
-                val name = productMap[id]?.name ?: "Producto #$id"
-                name to items.sumOf { it.quantity } 
-            }
-            .sortedByDescending { it.second }
-            .take(30)
+        // Actualizar Top 30 de forma asíncrona desde la nube si es posible, 
+        // o usar los datos locales filtrados si son pocos.
+        if (filteredSales.size < 200) {
+            _topProducts.value = filteredSales.flatMap { it.items }
+                .filter { !it.productId.startsWith("COMMON_") }
+                .groupBy { it.productId }
+                .map { (id, items) -> 
+                    (items.firstOrNull()?.productName ?: "Prod #$id") to items.sumOf { it.quantity } 
+                }
+                .sortedByDescending { it.second }
+                .take(30)
+        }
 
         DashboardStats(
             totalSales = totalSales,
             totalExpenses = totalExpenses,
             netProfit = netProfit,
-            topProducts = topProducts,
+            topProducts = _topProducts.value,
             salesCount = filteredSales.size
         )
     }.flowOn(kotlinx.coroutines.Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardStats())
+
+    fun refreshTop30() {
+        viewModelScope.launch {
+            try {
+                val cloudTop = saleRepository.getTopSellingProducts(branchId, 30)
+                if (cloudTop.isNotEmpty()) {
+                    _topProducts.value = cloudTop
+                }
+            } catch (e: Exception) {}
+        }
+    }
 
     private fun getStartOfPeriod(p: DashboardPeriod, now: Long): Long {
         val dt = Instant.fromEpochMilliseconds(now).toLocalDateTime(TimeZone.currentSystemDefault())

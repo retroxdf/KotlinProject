@@ -3,10 +3,10 @@ package com.abtsplazita.posplazita.domain
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class Category(val id: String, val name: String)
+data class Category(val id: String, val name: String, val lastUpdated: Long = 0L)
 
 @Serializable
-data class Tax(val id: String, val name: String, val rate: Double)
+data class Tax(val id: String, val name: String, val rate: Double, val lastUpdated: Long = 0L)
 
 @Serializable
 data class AppSettings(val key: String, val value: String)
@@ -419,7 +419,8 @@ data class Purchase(
     val items: List<PurchaseItem>,
     val total: Double,
     val paymentMethod: String = "Efectivo", // Efectivo (Fondo), Transferencia, Crédito
-    val status: PurchaseStatus = PurchaseStatus.PENDING_PRICE_UPDATE
+    val status: PurchaseStatus = PurchaseStatus.PENDING_PRICE_UPDATE,
+    val lastUpdated: Long = 0L
 )
 
 @Serializable
@@ -462,7 +463,8 @@ data class Supplier(
     val address: String? = null,
     val givesCredit: Boolean = false,
     val creditDays: Int = 0,
-    val currentDebt: Double = 0.0
+    val currentDebt: Double = 0.0,
+    val lastUpdated: Long = 0L
 )
 
 @Serializable
@@ -473,7 +475,8 @@ data class SupplierPayment(
     val timestamp: Long,
     val method: String, // Efectivo, Transferencia, etc.
     val userId: String,
-    val notes: String? = null
+    val notes: String? = null,
+    val lastUpdated: Long = 0L
 )
 
 @Serializable

@@ -48,6 +48,19 @@ class PurchaseViewModel(
     private val _lastSearchedBarcode = MutableStateFlow("")
     val lastSearchedBarcode = _lastSearchedBarcode.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            refreshData()
+        }
+    }
+
+    private suspend fun refreshData() {
+        try {
+            purchaseRepository.refreshPurchases(branchId)
+            supplierRepository?.refreshSuppliers()
+        } catch (e: Exception) {}
+    }
+
     private val _selectedProduct = MutableStateFlow<Product?>(null)
     val selectedProduct = _selectedProduct.asStateFlow()
 

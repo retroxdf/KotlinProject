@@ -59,7 +59,7 @@ class DesktopPrinterManager : PrinterManager {
     ) {
         if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
             sendEscPos { outputStream ->
-                // Abrir Cajón
+                // 1. Abrir Cajón (ANTES de imprimir)
                 if (openDrawer && openDrawerOnPrint) {
                     outputStream.write(getDrawerCommandBytes())
                 }
@@ -70,17 +70,31 @@ class DesktopPrinterManager : PrinterManager {
                 
                 val content = buildTicketContentCommon(sale, items, comment, walletBalance, config, lineChars, dateStr, branchName)
                 
-                // Usamos ISO-8859-1 que es compatible con la mayoría de impresoras térmicas para caracteres latinos
+                // Usamos ISO-8859-1 para caracteres latinos
                 outputStream.write(content.toByteArray(Charsets.ISO_8859_1))
                 outputStream.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A)) // Espacio final
 
-                // Corte de papel (Comando robusto GS V 66 0)
+                // 2. Corte de papel
                 if (autoCut) {
                     outputStream.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
                 }
             }
         } else if (connectionType == "SYSTEM") {
-            sendToSystemPrinter(sale, items, openDrawer, comment, walletBalance, config, branchName)
+            // Para impresoras con Driver (SYSTEM), enviamos cada etapa como un trabajo RAW independiente.
+            // Esto evita que el spooler de Windows ignore comandos ESC/POS mezclados con texto.
+            
+            // 1. Abrir Cajón (ANTES de imprimir como se solicitó)
+            if (openDrawer && openDrawerOnPrint) {
+                openDrawer()
+            }
+
+            // 2. Imprimir contenido del ticket
+            sendToSystemPrinter(sale, items, false, comment, walletBalance, config, branchName)
+
+            // 3. Cortar papel
+            if (autoCut) {
+                sendRawToSystemPrinter(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
+            }
         } else {
             println("Desktop: Ticket a $printerName | Abrir Cajón: $openDrawer | Saldo Monedero: $walletBalance | Comentario: $comment")
             if (config != null) println("Config: $config")
@@ -106,14 +120,21 @@ class DesktopPrinterManager : PrinterManager {
             
             val content = buildTicketContentCommon(sale, items, comment, walletBalance, config, lineChars, dateStr, branchName)
             
-            val sb = StringBuilder()
-            // No enviamos ESC@ a impresoras de sistema a menos que sea necesario, 
-            // para evitar que se imprima un '?' al inicio.
+            val baos = java.io.ByteArrayOutputStream()
             
-            sb.append(content)
-            sb.append("\n\n\n\n")
+            // 1. Reset e Inicio de comandos
+            baos.write(byteArrayOf(0x1B, 0x40))
+
+            // 2. Abrir Cajón (ANTES de imprimir como se solicitó)
+            if (openDrawer && openDrawerOnPrint) {
+                baos.write(getDrawerCommandBytes())
+            }
+
+            // 3. Contenido del Ticket
+            baos.write(content.toByteArray(Charsets.ISO_8859_1))
+            baos.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A)) // Espacio final
             
-            val bytes = sb.toString().toByteArray(Charsets.ISO_8859_1)
+            val bytes = baos.toByteArray()
             val docFlavor = javax.print.DocFlavor.BYTE_ARRAY.AUTOSENSE
             val doc = javax.print.SimpleDoc(bytes, docFlavor, null)
             val job = selectedService.createPrintJob()
@@ -131,81 +152,91 @@ class DesktopPrinterManager : PrinterManager {
         config: TicketConfig?,
         branchName: String?
     ) {
+        val lineChars = if (paperSize == 58) 30 else 40
+        val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+        val dateStr = sdf.format(Date())
+        
+        val divider = "-".repeat(lineChars)
+        val sb = StringBuilder()
+        sb.append("\n")
+        sb.append(alignText(branchName ?: "PLAZITA POS", lineChars, TicketAlignment.CENTER) + "\n")
+        sb.append(divider + "\n")
+        sb.append(alignText("COMPROBANTE DE ABONO", lineChars, TicketAlignment.CENTER) + "\n")
+        sb.append(divider + "\n")
+        sb.append("FECHA:   $dateStr\n")
+        sb.append("CLIENTE: ${customer.name}\n")
+        sb.append(divider + "\n")
+        
+        val prevDebtLabel = "SALDO ANTERIOR:"
+        val prevDebtVal = "$${(remainingDebt + amountPaid).formatPrice()}"
+        sb.append(prevDebtLabel.padEnd(lineChars - prevDebtVal.length) + prevDebtVal + "\n")
+        
+        val paidLabel = "MONTO ABONADO:"
+        val paidVal = "$${amountPaid.formatPrice()}"
+        sb.append(paidLabel.padEnd(lineChars - paidVal.length) + paidVal + "\n")
+        
+        sb.append(divider + "\n")
+        
+        val newDebtLabel = "NUEVO SALDO:"
+        val newDebtVal = "$${remainingDebt.formatPrice()}"
+        sb.append(newDebtLabel.padEnd(lineChars - newDebtVal.length) + newDebtVal + "\n")
+        
+        sb.append(divider + "\n")
+        sb.append("\n" + alignText("GRACIAS POR SU PAGO", lineChars, TicketAlignment.CENTER) + "\n\n\n\n")
+
+        val contentBytes = sb.toString().toByteArray(Charsets.ISO_8859_1)
+
         if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
             sendEscPos { outputStream ->
                 if (openDrawerOnPrint) {
-                    outputStream.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
+                    outputStream.write(getDrawerCommandBytes())
                 }
-
-                val lineChars = if (paperSize == 58) 30 else 40
-                val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
-                val dateStr = sdf.format(Date())
-                
-                val divider = "-".repeat(lineChars)
-                val sb = StringBuilder()
-                sb.append("\n")
-                sb.append(alignText(branchName ?: "PLAZITA POS", lineChars, TicketAlignment.CENTER) + "\n")
-                sb.append(divider + "\n")
-                sb.append(alignText("COMPROBANTE DE ABONO", lineChars, TicketAlignment.CENTER) + "\n")
-                sb.append(divider + "\n")
-                sb.append("FECHA:   $dateStr\n")
-                sb.append("CLIENTE: ${customer.name}\n")
-                sb.append(divider + "\n")
-                
-                val prevDebtLabel = "SALDO ANTERIOR:"
-                val prevDebtVal = "$${(remainingDebt + amountPaid).formatPrice()}"
-                sb.append(prevDebtLabel.padEnd(lineChars - prevDebtVal.length) + prevDebtVal + "\n")
-                
-                val paidLabel = "MONTO ABONADO:"
-                val paidVal = "$${amountPaid.formatPrice()}"
-                sb.append(paidLabel.padEnd(lineChars - paidVal.length) + paidVal + "\n")
-                
-                sb.append(divider + "\n")
-                
-                val newDebtLabel = "NUEVO SALDO:"
-                val newDebtVal = "$${remainingDebt.formatPrice()}"
-                sb.append(newDebtLabel.padEnd(lineChars - newDebtVal.length) + newDebtVal + "\n")
-                
-                sb.append(divider + "\n")
-                sb.append("\n" + alignText("GRACIAS POR SU PAGO", lineChars, TicketAlignment.CENTER) + "\n\n\n\n")
-
-                outputStream.write(sb.toString().toByteArray(Charsets.ISO_8859_1))
-
+                outputStream.write(contentBytes)
                 if (autoCut) {
                     outputStream.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
                 }
             }
+        } else if (connectionType == "SYSTEM") {
+            // Soporte RAW para Driver de Windows
+            if (openDrawerOnPrint) openDrawer()
+            sendRawToSystemPrinter(contentBytes)
+            if (autoCut) sendRawToSystemPrinter(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
         } else {
             println("Desktop: Abono de $amountPaid para ${customer.name}. Restante: $remainingDebt")
         }
     }
 
     override fun printMemberCard(customer: Customer) {
+        val sb = StringBuilder()
+        sb.append("\n\n")
+        sb.append("   TARJETA DEL CLIENTE\n")
+        sb.append("--------------------------------\n")
+        sb.append("CLIENTE: ${customer.name}\n")
+        sb.append("ID:      ${customer.id}\n")
+        sb.append("\n")
+        
+        val barcodeContent = "CLI-${customer.id}"
+        val barcodeCmd = byteArrayOf(0x1D, 0x68, 0x50) + // Altura
+                        byteArrayOf(0x1D, 0x6B, 0x49, barcodeContent.length.toByte()) + barcodeContent.toByteArray()
+        
+        val footer = "\n$barcodeContent\n--------------------------------\n\n\n\n"
+
         if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
             sendEscPos { outputStream ->
-                val sb = StringBuilder()
-                sb.append("\n\n")
-                sb.append("   TARJETA DEL CLIENTE\n")
-                sb.append("--------------------------------\n")
-                sb.append("CLIENTE: ${customer.name}\n")
-                sb.append("ID:      ${customer.id}\n")
-                sb.append("\n")
-                
-                val barcodeContent = "CLI-${customer.id}"
-                
-                outputStream.write(byteArrayOf(0x1B, 0x61, 0x01)) // Centrar
-                outputStream.write(byteArrayOf(0x1D, 0x68, 0x50)) // Altura
-                
-                val barcodeData = byteArrayOf(0x1D, 0x6B, 0x49, barcodeContent.length.toByte()) + barcodeContent.toByteArray()
-                outputStream.write(barcodeData)
-                
-                sb.append("\n$barcodeContent\n")
-                sb.append("--------------------------------\n")
-                sb.append("\n\n\n\n")
-                
                 outputStream.write(sb.toString().toByteArray(Charsets.US_ASCII))
+                outputStream.write(byteArrayOf(0x1B, 0x61, 0x01)) // Centrar
+                outputStream.write(barcodeCmd)
                 outputStream.write(byteArrayOf(0x1B, 0x61, 0x00)) // Reset
+                outputStream.write(footer.toByteArray(Charsets.US_ASCII))
             }
+        } else if (connectionType == "SYSTEM") {
+            // Mandamos comandos formateados por separado para máxima compatibilidad
+            sendRawToSystemPrinter(sb.toString().toByteArray(Charsets.ISO_8859_1))
+            sendRawToSystemPrinter(byteArrayOf(0x1B, 0x61, 0x01)) // Centrar
+            sendRawToSystemPrinter(barcodeCmd)
+            sendRawToSystemPrinter(byteArrayOf(0x1B, 0x61, 0x00)) // Reset align
+            sendRawToSystemPrinter(footer.toByteArray(Charsets.ISO_8859_1))
+            if (autoCut) sendRawToSystemPrinter(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
         } else {
             println("Desktop: Imprimiendo tarjeta del cliente para ${customer.name} | Código: CLI-${customer.id}")
         }

@@ -352,6 +352,13 @@ class AndroidCloudProvider : CloudProvider {
         }
     }
 
+    override fun syncPurchase(purchase: com.abtsplazita.posplazita.domain.Purchase) {}
+    override fun syncSupplier(supplier: com.abtsplazita.posplazita.domain.Supplier) {}
+    override fun syncPromotion(promotion: com.abtsplazita.posplazita.domain.Promotion) {}
+    override fun syncCategory(category: com.abtsplazita.posplazita.domain.Category) {}
+    override fun syncTax(tax: com.abtsplazita.posplazita.domain.Tax) {}
+    override fun syncSupplierPayment(payment: com.abtsplazita.posplazita.domain.SupplierPayment) {}
+
     override fun syncInventoryBatch(branchId: String, items: List<Inventory>) {
         scope.launch {
             try {
@@ -632,6 +639,16 @@ class AndroidCloudProvider : CloudProvider {
         } catch (e: Exception) { emptyList() }
     }
 
+    override suspend fun fetchCustomersIncremental(since: Long): List<Customer> {
+        return try {
+            firestore.collection("customers")
+                .where { "lastUpdated" greaterThan since }
+                .get().documents.mapNotNull { 
+                    try { it.data(Customer.serializer()) } catch (e: Exception) { null }
+                }
+        } catch (e: Exception) { emptyList() }
+    }
+
     override suspend fun fetchTerminals(branchId: String): List<PosTerminal> {
         return try {
             firestore.collection("terminals").where { "branchId" equalTo branchId }.get().documents.mapNotNull { 
@@ -660,6 +677,17 @@ class AndroidCloudProvider : CloudProvider {
                 }
         } catch (e: Exception) { emptyList() }
     }
+
+    override suspend fun fetchInventoryPaged(branchId: String, limit: Int, offset: Int): List<Inventory> = emptyList()
+
+    override suspend fun fetchPurchases(branchId: String): List<com.abtsplazita.posplazita.domain.Purchase> = emptyList()
+    override suspend fun fetchPurchasesIncremental(branchId: String, since: Long): List<com.abtsplazita.posplazita.domain.Purchase> = emptyList()
+    override suspend fun fetchSuppliers(): List<com.abtsplazita.posplazita.domain.Supplier> = emptyList()
+    override suspend fun fetchPromotions(): List<com.abtsplazita.posplazita.domain.Promotion> = emptyList()
+    override suspend fun fetchCategories(): List<com.abtsplazita.posplazita.domain.Category> = emptyList()
+    override suspend fun fetchTaxes(): List<com.abtsplazita.posplazita.domain.Tax> = emptyList()
+    override suspend fun fetchTopSellingProducts(branchId: String, limit: Int): List<Pair<String, Double>> = emptyList()
+    override suspend fun fetchSalesPaged(branchId: String, limit: Int, offset: Int, start: Long?, end: Long?): List<Sale> = emptyList()
 
     override suspend fun fetchAttendance(userId: String): List<AttendanceRecord> {
         return try {

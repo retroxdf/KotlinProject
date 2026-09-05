@@ -28,6 +28,14 @@ class SupplierViewModel(
     private val branchId: String = ""
 ) : ViewModel() {
 
+    init {
+        viewModelScope.launch {
+            try {
+                repository.refreshSuppliers()
+            } catch (e: Exception) {}
+        }
+    }
+    
     private val _suppliers = repository.getAllSuppliers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val suppliers = _suppliers

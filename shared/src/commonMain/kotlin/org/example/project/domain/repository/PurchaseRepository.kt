@@ -14,7 +14,8 @@ import com.abtsplazita.posplazita.domain.StockMovement
 
 class PurchaseRepository(
     private val purchaseDao: PurchaseDao,
-    private val productRepository: ProductRepository
+    private val productRepository: ProductRepository,
+    private val firebaseManager: com.abtsplazita.posplazita.data.remote.FirebaseManager? = null
 ) {
     fun getPurchases(branchId: String): Flow<List<Purchase>> {
         return purchaseDao.getPurchasesByBranch(branchId).map { entities ->
@@ -33,26 +34,44 @@ class PurchaseRepository(
     }
 
     suspend fun savePurchase(purchase: Purchase) {
-        val entity = purchase.toEntity()
-        val items = purchase.items.map { it.toEntity(purchase.id) }
+        val updated = purchase.copy(lastUpdated = com.abtsplazita.posplazita.currentTimeMillis())
+        val entity = updated.toEntity()
+        val items = updated.items.map { it.toEntity(updated.id) }
         purchaseDao.insertPurchaseWithItems(entity, items)
+        
+        firebaseManager?.syncPurchase(updated)
 
         // Actualizar stock de cada producto
-        purchase.items.forEach { item ->
-            val currentStock = productRepository.getStock(item.productId, purchase.branchId)
+        updated.items.forEach { item ->
+            val currentStock = productRepository.getStock(item.productId, updated.branchId)
             productRepository.updateStock(
                 productId = item.productId,
-                branchId = purchase.branchId,
+                branchId = updated.branchId,
                 newStock = currentStock + item.quantity,
-                userId = purchase.userId,
+                userId = updated.userId,
                 type = MovementType.IN_PURCHASE,
-                reason = "Compra #${purchase.id}"
+                reason = "Compra #${updated.id}"
             )
         }
     }
 
+    suspend fun refreshPurchases(branchId: String) {
+        println("PURCHASE_REPO: Sincronizando compras desde la nube...")
+        val cloudPurchases = firebaseManager?.fetchPurchases(branchId) ?: emptyList()
+        if (cloudPurchases.isNotEmpty()) {
+            cloudPurchases.forEach { purchase ->
+                val entity = purchase.toEntity()
+                val items = purchase.items.map { it.toEntity(purchase.id) }
+                purchaseDao.insertPurchaseWithItems(entity, items)
+            }
+            println("PURCHASE_REPO: Compras actualizadas (${cloudPurchases.size}).")
+        }
+    }
+
     suspend fun updatePurchaseStatus(purchase: Purchase, newStatus: PurchaseStatus) {
-        purchaseDao.updatePurchase(purchase.copy(status = newStatus).toEntity())
+        val updated = purchase.copy(status = newStatus, lastUpdated = com.abtsplazita.posplazita.currentTimeMillis())
+        purchaseDao.updatePurchase(updated.toEntity())
+        firebaseManager?.syncPurchase(updated)
     }
 
     suspend fun getNextPurchaseId(): String {

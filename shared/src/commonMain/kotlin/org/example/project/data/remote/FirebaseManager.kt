@@ -234,6 +234,13 @@ class FirebaseManager {
         cloudProvider.syncGlobalAds(urls)
     }
 
+    fun syncPurchase(purchase: com.abtsplazita.posplazita.domain.Purchase) = cloudProvider.syncPurchase(purchase)
+    fun syncSupplier(supplier: com.abtsplazita.posplazita.domain.Supplier) = cloudProvider.syncSupplier(supplier)
+    fun syncPromotion(promotion: com.abtsplazita.posplazita.domain.Promotion) = cloudProvider.syncPromotion(promotion)
+    fun syncCategory(category: com.abtsplazita.posplazita.domain.Category) = cloudProvider.syncCategory(category)
+    fun syncTax(tax: com.abtsplazita.posplazita.domain.Tax) = cloudProvider.syncTax(tax)
+    fun syncSupplierPayment(payment: com.abtsplazita.posplazita.domain.SupplierPayment) = cloudProvider.syncSupplierPayment(payment)
+
     fun observeGlobalAds(onUpdate: (List<String>) -> Unit) {
         cloudProvider.observeGlobalAds(onUpdate)
     }
@@ -241,6 +248,9 @@ class FirebaseManager {
     suspend fun fetchProducts() = cloudProvider.fetchProducts()
     suspend fun fetchProductsIncremental(since: Long) = cloudProvider.fetchProductsIncremental(since)
     suspend fun fetchSales(branchId: String) = cloudProvider.fetchSales(branchId)
+    suspend fun fetchSalesPaged(branchId: String, limit: Int, offset: Int, start: Long?, end: Long?) = 
+        cloudProvider.fetchSalesPaged(branchId, limit, offset, start, end)
+        
     suspend fun fetchCashOuts(branchId: String) = cloudProvider.fetchCashOuts(branchId)
     suspend fun fetchCashMovements(branchId: String) = cloudProvider.fetchCashMovements(branchId)
     suspend fun fetchPreCuts(branchId: String) = cloudProvider.fetchPreCuts(branchId)
@@ -255,7 +265,20 @@ class FirebaseManager {
     suspend fun fetchUsers() = cloudProvider.fetchUsers()
     suspend fun fetchBranches() = cloudProvider.fetchBranches()
     suspend fun fetchCustomers() = cloudProvider.fetchCustomers()
+    suspend fun fetchCustomersIncremental(since: Long) = cloudProvider.fetchCustomersIncremental(since)
     suspend fun fetchTerminals(branchId: String) = cloudProvider.fetchTerminals(branchId)
     suspend fun fetchInventory(branchId: String) = cloudProvider.fetchInventory(branchId)
+    suspend fun fetchInventoryPaged(branchId: String, limit: Int, offset: Int) = 
+        cloudProvider.fetchInventoryPaged(branchId, limit, offset)
+        
     suspend fun fetchInventoryIncremental(branchId: String, since: Long) = cloudProvider.fetchInventoryIncremental(branchId, since)
+
+    suspend fun fetchPurchases(branchId: String) = cloudProvider.fetchPurchases(branchId)
+    suspend fun fetchPurchasesIncremental(branchId: String, since: Long) = cloudProvider.fetchPurchasesIncremental(branchId, since)
+    suspend fun fetchSuppliers() = cloudProvider.fetchSuppliers()
+    suspend fun fetchPromotions() = cloudProvider.fetchPromotions()
+    suspend fun fetchCategories() = cloudProvider.fetchCategories()
+    suspend fun fetchTaxes() = cloudProvider.fetchTaxes()
+    
+    suspend fun fetchTopSellingProducts(branchId: String, limit: Int) = cloudProvider.fetchTopSellingProducts(branchId, limit)
 }

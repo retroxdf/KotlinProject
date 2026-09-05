@@ -86,7 +86,7 @@ fun AppContent() {
     val productRepository = remember { ProductRepository(database.productDao(), database.inventoryDao(), database.stockMovementDao(), database.categoryDao(), database.taxDao(), firebaseManager, globalScope) }
     val saleRepository = remember { SaleRepository(database.saleDao(), database.heldSaleDao(), firebaseManager) }
     val userRepository = remember { UserRepository(database.userDao(), database.rolePermissionDao(), firebaseManager, globalScope) }
-    val purchaseRepository = remember { PurchaseRepository(database.purchaseDao(), productRepository) }
+    val purchaseRepository = remember { PurchaseRepository(database.purchaseDao(), productRepository, firebaseManager) }
     val purchaseUnitRepository = remember { PurchaseUnitRepository(database.purchaseUnitDao()) }
     val branchRepository = remember { BranchRepository(database.branchDao(), firebaseManager, globalScope) }
     val posTerminalRepository = remember { PosTerminalRepository(database.posTerminalDao(), firebaseManager) }
@@ -97,7 +97,7 @@ fun AppContent() {
     val expenseRepository = remember { ExpenseRepository(database.expenseDao()) }
     val promotionRepository = remember { PromotionRepository(database.promotionDao(), firebaseManager) }
     val permissionRepository = remember { PermissionRepository(database.rolePermissionDao()) }
-    val supplierRepository = remember { SupplierRepository(database.supplierDao(), database.supplierPaymentDao(), database.productSupplierDao()) }
+    val supplierRepository = remember { SupplierRepository(database.supplierDao(), database.supplierPaymentDao(), database.productSupplierDao(), firebaseManager) }
     val customerRepository = remember { CustomerRepository(database.customerDao(), database.customerPaymentDao(), database.customerProductPriceDao(), firebaseManager, globalScope) }
     val employeeRepository = remember { EmployeeRepository(database.employeeDao(), database.scheduleDao(), database.loanDao(), database.absenceReplacementDao(), database.cashBoxDao(), database.contaplaTransactionDao(), database.corteContaplaDao(), database.paymentRecordDao(), database.attendanceDao(), firebaseManager) }
     val settingsRepository = remember { SettingsRepository(database.appSettingsDao()) }
@@ -109,7 +109,7 @@ fun AppContent() {
     val scaleManager = remember { getScaleManager() }
     val currentSaleManager = remember { CurrentSaleManager(settingsRepository, globalScope) }
     
-    val syncManager = remember { SyncManager(saleRepository, cashMovementRepository, productRepository, branchRepository, userRepository, employeeRepository, customerRepository, settingsRepository, globalScope) }
+    val syncManager = remember { SyncManager(saleRepository, cashMovementRepository, productRepository, branchRepository, userRepository, employeeRepository, customerRepository, purchaseRepository, supplierRepository, promotionRepository, deletionLogRepository, settingsRepository, globalScope) }
     val updateViewModel = remember { UpdateViewModel() }
     
     LaunchedEffect(Unit) {

@@ -10,11 +10,13 @@ import com.abtsplazita.posplazita.data.toEntity
 import com.abtsplazita.posplazita.domain.Supplier
 import com.abtsplazita.posplazita.domain.SupplierPayment
 import com.abtsplazita.posplazita.domain.ProductSupplier
+import com.abtsplazita.posplazita.data.remote.FirebaseManager
 
 class SupplierRepository(
     private val supplierDao: SupplierDao,
     private val paymentDao: SupplierPaymentDao? = null,
-    private val productSupplierDao: ProductSupplierDao
+    private val productSupplierDao: ProductSupplierDao,
+    private val firebaseManager: FirebaseManager? = null
 ) {
     fun getAllSuppliers(): Flow<List<Supplier>> {
         return supplierDao.getAllSuppliers().map { entities ->
@@ -57,5 +59,16 @@ class SupplierRepository(
 
     suspend fun saveProductSupplierLink(link: ProductSupplier) {
         productSupplierDao.insertProductSupplier(link.toEntity())
+    }
+
+    suspend fun refreshSuppliers() {
+        println("SUPPLIER_REPO: Actualizando proveedores desde la nube...")
+        val cloudSuppliers = firebaseManager?.fetchSuppliers() ?: emptyList()
+        if (cloudSuppliers.isNotEmpty()) {
+            cloudSuppliers.forEach { supplier ->
+                supplierDao.insertSupplier(supplier.toEntity())
+            }
+            println("SUPPLIER_REPO: Proveedores actualizados (${cloudSuppliers.size}).")
+        }
     }
 }

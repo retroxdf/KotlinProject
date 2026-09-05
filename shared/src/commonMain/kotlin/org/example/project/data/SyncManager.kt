@@ -2,6 +2,7 @@ package com.abtsplazita.posplazita.data
 
 import kotlinx.coroutines.*
 import com.abtsplazita.posplazita.domain.repository.*
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 
 class SyncManager(
@@ -12,10 +13,17 @@ class SyncManager(
     private val userRepository: UserRepository,
     private val employeeRepository: EmployeeRepository,
     private val customerRepository: CustomerRepository,
+    private val purchaseRepository: PurchaseRepository,
+    private val supplierRepository: SupplierRepository,
+    private val promotionRepository: PromotionRepository,
+    private val deletionLogRepository: DeletionLogRepository,
     private val settingsRepository: SettingsRepository,
     private val scope: CoroutineScope
 ) {
     private var syncJob: Job? = null
+    private var periodic1hJob: Job? = null
+    private var periodic3hJob: Job? = null
+    
     private var currentBranchId: String? = null
 
     fun setBranchId(id: String?) {
@@ -24,7 +32,6 @@ class SyncManager(
             // Reiniciar observación de inventario para la nueva sucursal
             productRepository.startIncrementalSync(id)
             
-            // Si entramos a una sucursal, verificar si ya descargamos su inventario inicial
             scope.launch {
                 val syncKey = "is_inv_sync_done_$id"
                 if (settingsRepository.getSetting(syncKey) != "true") {
@@ -45,59 +52,86 @@ class SyncManager(
     fun startAutoSync() {
         if (syncJob != null) return
         
-        // Iniciamos observadores incrementales (Tiempo Real en Android, Polling en PC)
+        // 1. Iniciamos observadores incrementales (Para Android)
         productRepository.startIncrementalSync(currentBranchId ?: "")
         userRepository.startIncrementalSync()
         branchRepository.startIncrementalSync()
         customerRepository.startIncrementalSync()
 
+        // 2. Tarea de Sincronización Inicial y Subida cada 15 min
         syncJob = scope.launch {
-            delay(5000) // Unos segundos de calma al iniciar
+            delay(5000)
             
-            // --- LOGICA DE SINCRONIZACIÓN INICIAL (Local-First) ---
             val isInitialSyncDone = settingsRepository.getSetting("is_initial_sync_completed") == "true"
             if (!isInitialSyncDone) {
-                println("SYNC_MANAGER: Realizando descarga inicial masiva...")
-                try {
-                    // Descargar todo una sola vez
-                    productRepository.refreshProducts(isInitial = true)
-                    userRepository.refreshUsers()
-                    employeeRepository.refreshEmployees()
-                    branchRepository.refreshBranches()
-                    customerRepository.refreshCustomers()
-                    
-                    if (currentBranchId != null) {
-                        productRepository.refreshInventory(currentBranchId!!, isInitial = true)
-                    }
-                    
-                    settingsRepository.saveSetting("is_initial_sync_completed", "true")
-                    println("SYNC_MANAGER: Descarga inicial completada exitosamente.")
-                } catch (e: Exception) {
-                    println("SYNC_MANAGER: Error en carga inicial: ${e.message}")
-                }
+                performFullInitialSync()
+                settingsRepository.saveSetting("is_initial_sync_completed", "true")
             }
 
             while (isActive) {
-                // Sincronización cada 15 minutos solo para SUBIR datos locales
-                println("SYNC_MANAGER: Sincronizando datos locales pendientes (Cada 15 min)...")
-                
+                println("SYNC_MANAGER: Subiendo datos locales pendientes (15 min)...")
                 try {
-                    // Subir ventas y movimientos locales pendientes
                     saleRepository.syncPendingSalesWithCloud()
                     movementRepository.syncPendingMovementsWithCloud()
-                    println("SYNC_MANAGER: Datos locales sincronizados.")
                 } catch (e: Exception) {
                     println("SYNC_MANAGER: Error al subir datos: ${e.message}")
                 }
-                
-                // Esperar 15 minutos
                 delay(15.minutes)
             }
+        }
+
+        // 3. Tarea de Descarga de Productos cada 1 hora
+        periodic1hJob = scope.launch {
+            while (isActive) {
+                delay(1.hours)
+                println("SYNC_MANAGER: Actualizando catálogo de productos (1h)...")
+                try {
+                    productRepository.refreshProducts(isInitial = false)
+                } catch (e: Exception) {}
+            }
+        }
+
+        // 4. Tarea de Descarga de Clientes, Promociones y Configuración cada 3 horas
+        periodic3hJob = scope.launch {
+            while (isActive) {
+                delay(3.hours)
+                println("SYNC_MANAGER: Sincronización trihoraria (Clientes, Promos, Borrados)...")
+                try {
+                    customerRepository.refreshCustomers()
+                    promotionRepository.refreshPromotions()
+                    supplierRepository.refreshSuppliers()
+                    if (currentBranchId != null) {
+                        purchaseRepository.refreshPurchases(currentBranchId!!)
+                        deletionLogRepository.refreshLogs(currentBranchId!!)
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
+    private suspend fun performFullInitialSync() {
+        println("SYNC_MANAGER: Realizando descarga inicial masiva...")
+        try {
+            productRepository.refreshProducts(isInitial = true)
+            userRepository.refreshUsers()
+            employeeRepository.refreshEmployees()
+            branchRepository.refreshBranches()
+            customerRepository.refreshCustomers()
+            
+            if (currentBranchId != null) {
+                productRepository.refreshInventory(currentBranchId!!, isInitial = true)
+            }
+            println("SYNC_MANAGER: Descarga inicial completada exitosamente.")
+        } catch (e: Exception) {
+            println("SYNC_MANAGER: Error en carga inicial: ${e.message}")
         }
     }
 
     fun stopAutoSync() {
         syncJob?.cancel()
+        periodic1hJob?.cancel()
+        periodic3hJob?.cancel()
         syncJob = null
     }
 }
+

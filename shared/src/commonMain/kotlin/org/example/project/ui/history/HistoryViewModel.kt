@@ -30,6 +30,7 @@ import com.abtsplazita.posplazita.domain.repository.CashOutRepository
 import com.abtsplazita.posplazita.domain.repository.PurchaseRepository
 import com.abtsplazita.posplazita.domain.repository.ProductRepository
 import com.abtsplazita.posplazita.domain.repository.CashMovementRepository
+import kotlinx.datetime.*
 
 data class TerminalBalance(
     val terminalId: String,
@@ -52,6 +53,8 @@ data class InventoryReportItem(
     val totalCost: Double
 )
 
+enum class HistoryPeriod { TODAY, YESTERDAY, LAST_7_DAYS, MONTH_ACTUAL, MONTH_PREVIOUS, CUSTOM }
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class HistoryViewModel(
     private val saleRepository: SaleRepository,
@@ -71,6 +74,9 @@ class HistoryViewModel(
     private val printerManager: PrinterManager,
     private var _branchId: String
 ) : ViewModel() {
+
+    private val _period = MutableStateFlow(HistoryPeriod.TODAY)
+    val period = _period.asStateFlow()
 
     private val _currentUser = MutableStateFlow<com.abtsplazita.posplazita.domain.User?>(null)
     val currentUser = _currentUser.asStateFlow()
@@ -95,6 +101,57 @@ class HistoryViewModel(
 
     private val _filterEndDate = MutableStateFlow<Long?>(null)
     val filterEndDate = _filterEndDate.asStateFlow()
+
+    fun setPeriod(p: HistoryPeriod) {
+        _period.value = p
+        if (p != HistoryPeriod.CUSTOM) {
+            updateDateRangeFromPeriod(p)
+        }
+    }
+
+    private fun updateDateRangeFromPeriod(p: HistoryPeriod) {
+        val now = com.abtsplazita.posplazita.currentTimeMillis()
+        val tz = TimeZone.currentSystemDefault()
+        val dt = Instant.fromEpochMilliseconds(now).toLocalDateTime(tz)
+        
+        when(p) {
+            HistoryPeriod.TODAY -> {
+                val start = LocalDateTime(dt.year, dt.month, dt.dayOfMonth, 0, 0, 0)
+                _filterStartDate.value = start.toInstant(tz).toEpochMilliseconds()
+                _filterEndDate.value = null
+            }
+            HistoryPeriod.YESTERDAY -> {
+                val startDay = Instant.fromEpochMilliseconds(now).minus(1, DateTimeUnit.DAY, tz).toLocalDateTime(tz)
+                val start = LocalDateTime(startDay.year, startDay.month, startDay.dayOfMonth, 0, 0, 0)
+                val end = LocalDateTime(startDay.year, startDay.month, startDay.dayOfMonth, 23, 59, 59)
+                _filterStartDate.value = start.toInstant(tz).toEpochMilliseconds()
+                _filterEndDate.value = end.toInstant(tz).toEpochMilliseconds()
+            }
+            HistoryPeriod.LAST_7_DAYS -> {
+                _filterStartDate.value = now - (7 * 24 * 60 * 60 * 1000L)
+                _filterEndDate.value = null
+            }
+            HistoryPeriod.MONTH_ACTUAL -> {
+                val start = LocalDateTime(dt.year, dt.month, 1, 0, 0, 0)
+                _filterStartDate.value = start.toInstant(tz).toEpochMilliseconds()
+                _filterEndDate.value = null
+            }
+            HistoryPeriod.MONTH_PREVIOUS -> {
+                val firstOfCurrent = LocalDateTime(dt.year, dt.month, 1, 0, 0, 0).toInstant(tz)
+                val lastOfPrev = firstOfCurrent.minus(1, DateTimeUnit.SECOND, tz)
+                val firstOfPrev = lastOfPrev.toLocalDateTime(tz).let { 
+                    LocalDateTime(it.year, it.month, 1, 0, 0, 0)
+                }
+                _filterStartDate.value = firstOfPrev.toInstant(tz).toEpochMilliseconds()
+                _filterEndDate.value = lastOfPrev.toEpochMilliseconds()
+            }
+            HistoryPeriod.CUSTOM -> {} 
+        }
+    }
+
+    init {
+        updateDateRangeFromPeriod(HistoryPeriod.TODAY)
+    }
 
     val availableBranches = if (branchRepository != null) {
         branchRepository.getAllBranches()

@@ -43,6 +43,22 @@ class CustomerRepository(
         return customerDao.getCustomerById(id)?.toDomain()
     }
 
+    suspend fun refreshCustomer(id: String): Customer? {
+        // En PC/Desktop esto debería consultar la nube directamente para el dato más fresco
+        return try {
+            val cloudCustomers = firebaseManager?.fetchCustomers() ?: emptyList()
+            val fresh = cloudCustomers.find { it.id == id }
+            if (fresh != null) {
+                customerDao.insertCustomer(fresh.toEntity())
+                fresh
+            } else {
+                customerDao.getCustomerById(id)?.toDomain()
+            }
+        } catch (e: Exception) {
+            customerDao.getCustomerById(id)?.toDomain()
+        }
+    }
+
     suspend fun updateDebt(customerId: String, amount: Double) {
         customerDao.updateDebt(customerId, amount)
         // Sincronizar el cliente actualizado con la nube
