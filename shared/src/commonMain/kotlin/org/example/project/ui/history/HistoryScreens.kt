@@ -442,7 +442,36 @@ fun PurchasesHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
                                 }
                             }
                         },
-                        supportingContent = { Text(formatTimestamp(p.timestamp)) },
+                        supportingContent = { 
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(formatTimestamp(p.timestamp))
+                                Spacer(Modifier.width(12.dp))
+                                Surface(
+                                    color = when {
+                                        p.paymentMethod.contains("Efectivo", true) -> Color(0xFF2E7D32)
+                                        p.paymentMethod.contains("Tarjeta", true) -> Color(0xFF1976D2)
+                                        p.paymentMethod.contains("Transferencia", true) -> Color(0xFF7B1FA2)
+                                        p.paymentMethod.contains("Crédito", true) -> Color(0xFFD32F2F)
+                                        else -> Color.Gray
+                                    }.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = p.paymentMethod.uppercase(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when {
+                                            p.paymentMethod.contains("Efectivo", true) -> Color(0xFF2E7D32)
+                                            p.paymentMethod.contains("Tarjeta", true) -> Color(0xFF1976D2)
+                                            p.paymentMethod.contains("Transferencia", true) -> Color(0xFF7B1FA2)
+                                            p.paymentMethod.contains("Crédito", true) -> Color(0xFFD32F2F)
+                                            else -> Color.Gray
+                                        },
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        },
                         trailingContent = { Text("$${p.total.formatPrice()}", fontWeight = FontWeight.Black, color = if(isPending) Color.Red else Color.Unspecified) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                     )
@@ -506,7 +535,7 @@ fun PurchasePriceAdjustmentDialog(purchase: Purchase, viewModel: HistoryViewMode
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Header (Estilo Imagen 1/2)
-                Surface(color = Color(0xFF0056A0), contentColor = Color.White) {
+                Surface(color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
                     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = Color.White) }
                         Spacer(Modifier.width(8.dp))
@@ -624,7 +653,7 @@ fun PurchasePriceAdjustmentDialog(purchase: Purchase, viewModel: HistoryViewMode
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Header Azul
-                    Surface(color = Color(0xFF0056A0), contentColor = Color.White) {
+                    Surface(color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
                         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { editingProductItem = null }) { Icon(Icons.Default.Close, null, tint = Color.White) }
                             Spacer(Modifier.width(16.dp))
@@ -800,6 +829,12 @@ fun CashMovementsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) 
 @Composable
 fun PreCutsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
     val pcs by viewModel.preCutsFiltered.collectAsState()
+    val branches by viewModel.availableBranches.collectAsState()
+    val terminals by viewModel.availableTerminals.collectAsState()
+    
+    val branchMap = remember(branches) { branches.associate { it.id to it.name } }
+    val terminalMap = remember(terminals) { terminals.associate { it.id to it.name } }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
@@ -807,15 +842,73 @@ fun PreCutsHistoryScreen(viewModel: HistoryViewModel, onBack: () -> Unit) {
             HistoryPeriodSelector(viewModel)
         }
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
-            items(pcs) { pc ->
-                ListItem(
-                    headlineContent = { Text("PRECORTE: ${pc.userId}", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text(formatTimestamp(pc.timestamp)) },
-                    trailingContent = { Text("$${pc.countedAmount.formatPrice()}", fontWeight = FontWeight.Black) }
-                )
-                HorizontalDivider()
+            items(pcs.sortedByDescending { it.timestamp }) { pc ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("PRECORTE: ${pc.userId.uppercase()}", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
+                                Text(formatTimestamp(pc.timestamp), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            }
+                            val diffColor = when {
+                                pc.difference > 0.01 -> Color(0xFF2E7D32) // Sobrante
+                                pc.difference < -0.01 -> Color.Red // Faltante
+                                else -> Color(0xFF0056A0) // Cuadrado
+                            }
+                            Surface(color = diffColor, shape = RoundedCornerShape(4.dp)) {
+                                Text(
+                                    text = if (pc.difference > 0.01) "SOBRANTE" else if (pc.difference < -0.01) "FALTANTE" else "CUADRADO",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        
+                        Spacer(Modifier.height(12.dp))
+                        
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            InfoCol("Sucursal", branchMap[pc.branchId] ?: "Principal", Modifier.weight(1f))
+                            InfoCol("Caja", terminalMap[pc.terminalId] ?: "Caja 1", Modifier.weight(1f))
+                        }
+                        
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                        
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("DEBE HABER", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                Text("$${pc.expectedAmount.formatPrice()}", fontWeight = FontWeight.Bold)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("CONTADO", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                Text("$${pc.countedAmount.formatPrice()}", fontWeight = FontWeight.Bold)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("DIFERENCIA", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                Text(
+                                    text = "${if(pc.difference > 0) "+" else ""}$${pc.difference.formatPrice()}",
+                                    fontWeight = FontWeight.Black,
+                                    color = if(pc.difference < -0.01) Color.Red else if(pc.difference > 0.01) Color(0xFF2E7D32) else Color.Unspecified
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+fun InfoCol(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 
@@ -890,7 +983,7 @@ fun CashOutScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         // Cabecera Azul
-        Surface(color = Color(0xFF0056A0), contentColor = Color.White) {
+        Surface(color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
             Row(modifier = Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onNavigateToPos) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White) }
                 Text("CORTE DE CAJA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))

@@ -49,7 +49,10 @@ class PosViewModel(
     private val productReturnRepository: com.abtsplazita.posplazita.domain.repository.ProductReturnRepository? = null,
     private val printerManager: PrinterManager? = null,
     private val firebaseManager: FirebaseManager? = null,
-    private val scaleManager: ScaleManager = getScaleManager()
+    private val scaleManager: ScaleManager = getScaleManager(),
+    private val checkoutManager: com.abtsplazita.posplazita.domain.CheckoutManager,
+    private val cashManager: com.abtsplazita.posplazita.domain.CashManager,
+    private val customerInteractor: com.abtsplazita.posplazita.domain.CustomerInteractor
 ) : ViewModel() {
 
     enum class FocusArea { SEARCH_BAR, SEARCH_RESULTS, CART }
@@ -277,17 +280,15 @@ class PosViewModel(
     private val _warningMessage = MutableStateFlow<String?>(null)
     val warningMessage = _warningMessage.asStateFlow()
 
-    private val _saleChange = MutableStateFlow<Double?>(null)
-    val saleChange = _saleChange.asStateFlow()
+    // --- Redirecciones de CheckoutManager ---
+    val isProcessingSale = checkoutManager.isProcessing
+    val isWaitingForMP = checkoutManager.isWaitingForMP
+    val mpStatus = checkoutManager.mpStatus
+    val saleChange = checkoutManager.saleChange
+    val showSaleSuccessOverlay = checkoutManager.showSaleSuccessOverlay
+    val showCardSuccess = checkoutManager.showCardSuccess
 
-    private val _showSaleSuccessOverlay = MutableStateFlow(false)
-    val showSaleSuccessOverlay = _showSaleSuccessOverlay.asStateFlow()
-
-    private val _showCardSuccess = MutableStateFlow(false)
-    val showCardSuccess = _showCardSuccess.asStateFlow()
-
-    private val _isProcessingSale = MutableStateFlow(false)
-    val isProcessingSale = _isProcessingSale.asStateFlow()
+    fun cancelMpPayment() = checkoutManager.cancelMpPayment()
 
     private val _amountPaidText = MutableStateFlow(TextFieldValue(""))
     val amountPaidText = _amountPaidText.asStateFlow()
@@ -363,208 +364,51 @@ class PosViewModel(
         }
     }
 
-    // --- Estado de Mercado Pago ---
-    private val _mpStatus = MutableStateFlow<String?>(null)
-    val mpStatus = _mpStatus.asStateFlow()
+    // --- Redirecciones de CustomerInteractor ---
+    val selectedCustomer = customerInteractor.selectedCustomer
+    val showCustomerDialog = customerInteractor.showCustomerDialog
+    val customerSearchQuery = customerInteractor.customerSearchQuery
+    val selectedCustomerIndex = customerInteractor.selectedCustomerIndex
+    val filteredCustomers = customerInteractor.filteredCustomers
+    val showAddCustomerDialog = customerInteractor.showAddCustomerDialog
+    val editingCustomer = customerInteractor.editingCustomer
+    val showDebtPaymentDialog = customerInteractor.showDebtPaymentDialog
 
-    private val _isWaitingForMP = MutableStateFlow(false)
-    val isWaitingForMP = _isWaitingForMP.asStateFlow()
-
-    private var mpCancelRequested = false
-    private var currentMpIdempotencyKey: String? = null
-
-    fun cancelMpPayment() {
-        mpCancelRequested = true
-        _isWaitingForMP.value = false
-        _isProcessingSale.value = false
-        _isProcessingWithdrawal.value = false
-        _mpStatus.value = null
-    }
-
-    // --- Gestión de Clientes ---
-    private val _selectedCustomer = MutableStateFlow<Customer?>(null)
-    val selectedCustomer = _selectedCustomer.asStateFlow()
-
-    private val _showCustomerDialog = MutableStateFlow(false)
-    val showCustomerDialog = _showCustomerDialog.asStateFlow()
-
-    private val _customerSearchQuery = MutableStateFlow("")
-    val customerSearchQuery = _customerSearchQuery.asStateFlow()
-
-    private val _selectedCustomerIndex = MutableStateFlow(0)
-    val selectedCustomerIndex = _selectedCustomerIndex.asStateFlow()
-
-    val filteredCustomers: StateFlow<List<Customer>> = combine(
-        customerRepository?.getAllCustomers() ?: flowOf(emptyList()),
-        _customerSearchQuery
-    ) { allCustomers, query ->
-        if (query.isBlank()) allCustomers
-        else {
-            val normQuery = query.normalizeForSearch()
-            allCustomers.filter { 
-                it.name.normalizeForSearch().contains(normQuery) || 
-                it.phone?.contains(query) == true 
-            }.sortedBy { it.name.normalizeForSearch().indexOf(normQuery) }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _showAddCustomerDialog = MutableStateFlow(false)
-    val showAddCustomerDialog = _showAddCustomerDialog.asStateFlow()
-
-    private val _editingCustomer = MutableStateFlow<Customer?>(null)
-    val editingCustomer = _editingCustomer.asStateFlow()
-
-    fun openCustomerDialog() { _showCustomerDialog.value = true }
-    fun closeCustomerDialog() { _showCustomerDialog.value = false }
-
-    fun updateCustomerSearchQuery(query: String) {
-        _customerSearchQuery.value = query
-        _selectedCustomerIndex.value = 0
-    }
-
-    fun moveCustomerFocus(delta: Int) {
-        val count = filteredCustomers.value.size
-        if (count > 0) {
-            _selectedCustomerIndex.value = (_selectedCustomerIndex.value + delta).coerceIn(0, count - 1)
-        }
-    }
-
-    fun selectFocusedCustomer() {
-        val customers = filteredCustomers.value
-        if (_selectedCustomerIndex.value in customers.indices) {
-            _selectedCustomer.value = customers[_selectedCustomerIndex.value]
-            closeCustomerDialog()
-        }
-    }
-
-    fun selectCustomer(customer: Customer?) {
-        _selectedCustomer.value = customer
-        closeCustomerDialog()
-        
-        // Bajo demanda: Actualizar saldo y monedero desde la nube
-        if (customer != null) {
-            viewModelScope.launch {
-                try {
-                    customerRepository?.refreshCustomer(customer.id)?.let { refreshed ->
-                        if (_selectedCustomer.value?.id == refreshed.id) {
-                            _selectedCustomer.value = refreshed
-                        }
-                    }
-                } catch (e: Exception) {}
-            }
-        }
-    }
-
-    fun openAddCustomerDialog() { 
+    fun openCustomerDialog() = customerInteractor.openCustomerDialog()
+    fun closeCustomerDialog() = customerInteractor.closeCustomerDialog()
+    fun updateCustomerSearchQuery(query: String) = customerInteractor.updateCustomerSearchQuery(query)
+    fun moveCustomerFocus(delta: Int) = customerInteractor.moveCustomerFocus(delta)
+    fun selectFocusedCustomer() = customerInteractor.selectFocusedCustomer()
+    fun selectCustomer(customer: Customer?) = customerInteractor.selectCustomer(customer)
+    fun openAddCustomerDialog() {
         if (hasPermission(Permission.CUSTOMER_CREATE)) {
-            _showCustomerDialog.value = false // Cerrar búsqueda para evitar encimar diálogos
-            _editingCustomer.value = Customer(id = "", name = "")
-            _showAddCustomerDialog.value = true 
+            customerInteractor.openAddCustomerDialog()
         } else if (isRestricted(Permission.CUSTOMER_CREATE)) {
-            // No cerramos búsqueda aquí aún, lo hacemos al autorizar
             requestAuthorization("Crear Cliente") { 
-                _showCustomerDialog.value = false
-                _editingCustomer.value = Customer(id = "", name = "")
-                _showAddCustomerDialog.value = true 
+                customerInteractor.openAddCustomerDialog()
             }
         } else {
             setErrorMessage("No tienes permiso para crear clientes.")
         }
     }
-
-    fun updateEditingCustomer(customer: Customer) {
-        _editingCustomer.value = customer
-    }
-
-    fun saveNewCustomer() {
-        val customer = _editingCustomer.value ?: return
-        if (customer.name.isBlank()) return
-
-        viewModelScope.launch {
-            try {
-                val toSave = customer.copy(id = "C${currentTimeMillis()}")
-                customerRepository?.saveCustomer(toSave)
-                _selectedCustomer.value = toSave
-                _editingCustomer.value = null
-                _showAddCustomerDialog.value = false
-                setWarningMessage("Cliente '${toSave.name}' guardado y seleccionado.")
-            } catch (e: Exception) {
-                setErrorMessage("Error al guardar cliente: ${e.message}")
-            }
-        }
-    }
-
-    fun closeAddCustomerDialog(shouldReopenSelection: Boolean = true) { 
-        _showAddCustomerDialog.value = false 
-        _editingCustomer.value = null
-        if (shouldReopenSelection) {
-            _showCustomerDialog.value = true
-        }
-    }
-
-    fun addCustomer(name: String, phone: String, days: Int, limit: Double, weekly: Double) {
-        viewModelScope.launch {
-            try {
-                val newCustomer = Customer(
-                    id = "C${currentTimeMillis()}",
-                    name = name,
-                    phone = phone,
-                    creditDays = days,
-                    creditLimit = limit,
-                    creditLimitWeekly = weekly
-                )
-                customerRepository?.saveCustomer(newCustomer)
-                _selectedCustomer.value = newCustomer
-                closeAddCustomerDialog(shouldReopenSelection = false)
-            } catch (e: Exception) {
-                setErrorMessage("Error al guardar cliente: ${e.message}")
-            }
-        }
-    }
-
-    // --- Pagos de Deuda ---
-    private val _showDebtPaymentDialog = MutableStateFlow(false)
-    val showDebtPaymentDialog = _showDebtPaymentDialog.asStateFlow()
-
-    fun openDebtPaymentDialog() {
-        _showDebtPaymentDialog.value = true
-    }
-
-    fun closeDebtPaymentDialog() { _showDebtPaymentDialog.value = false }
-
+    fun updateEditingCustomer(customer: Customer) = customerInteractor.updateEditingCustomer(customer)
+    fun saveNewCustomer() = customerInteractor.saveNewCustomer(onError = { setErrorMessage(it) }, onSuccess = { setWarningMessage(it) })
+    fun closeAddCustomerDialog(shouldReopenSelection: Boolean = true) = customerInteractor.closeAddCustomerDialog(shouldReopenSelection)
+    fun openDebtPaymentDialog() = customerInteractor.openDebtPaymentDialog()
+    fun closeDebtPaymentDialog() = customerInteractor.closeDebtPaymentDialog()
     fun processDebtPayment(customer: Customer, amount: Double) {
-        if (amount <= 0) return
-        viewModelScope.launch {
-            try {
-                addCashMovement(amount, "Abono de deuda: ${customer.name}", isManual = false)
-                customerRepository?.addPayment(CustomerPayment(
-                    id = "PAY_${currentTimeMillis()}",
-                    customerId = customer.id,
-                    amount = amount,
-                    timestamp = currentTimeMillis(),
-                    userId = _currentUser.value?.username ?: "admin"
-                ))
-                
-                val updatedCustomer = customerRepository?.getCustomerById(customer.id)
-                _selectedCustomer.value = updatedCustomer
-                
-                // Imprimir comprobante de abono
-                if (updatedCustomer != null) {
-                    printerManager?.printDebtPayment(
-                        customer = updatedCustomer,
-                        amountPaid = amount,
-                        remainingDebt = updatedCustomer.currentDebt,
-                        config = _ticketConfig.value,
-                        branchName = _branchName.value
-                    )
-                }
-
-                closeDebtPaymentDialog()
-                setWarningMessage("Abono de $${amount.formatPrice()} registrado e impreso.")
-            } catch (e: Exception) {
-                setErrorMessage("Error al procesar abono: ${e.message}")
-            }
-        }
+        customerInteractor.processDebtPayment(
+            customer = customer,
+            amount = amount,
+            branchId = branchId,
+            selectedTerminal = _selectedTerminal.value,
+            currentUser = _currentUser.value,
+            cashInDrawer = _cashInDrawer.value,
+            ticketConfig = _ticketConfig.value,
+            branchName = _branchName.value,
+            onError = { setErrorMessage(it) },
+            onSuccess = { setWarningMessage(it) }
+        )
     }
 
     // --- Producto Común (Comodín) ---
@@ -944,7 +788,7 @@ class PosViewModel(
                 branchId = branchId,
                 terminalId = _selectedTerminal.value?.id,
                 items = currentItems.value,
-                customerId = _selectedCustomer.value?.id,
+                customerId = selectedCustomer.value?.id,
                 total = total.value
             )
             saleRepository.saveHeldSale(heldSale)
@@ -984,7 +828,7 @@ class PosViewModel(
                     branchId = branchId,
                     terminalId = _selectedTerminal.value?.id,
                     items = currentItems.value,
-                    customerId = _selectedCustomer.value?.id,
+                    customerId = selectedCustomer.value?.id,
                     total = total.value
                 )
                 saleRepository.saveHeldSale(currentHeld)
@@ -995,9 +839,10 @@ class PosViewModel(
 
             // 2. Cargar la nueva venta
             currentSaleManager.loadItems(realItems)
-            _selectedCustomer.value = if (!heldSale.customerId.isNullOrBlank()) {
+            val customer = if (!heldSale.customerId.isNullOrBlank()) {
                 customerRepository?.getCustomerById(heldSale.customerId)
             } else null
+            selectCustomer(customer)
             
             saleRepository.deleteHeldSale(heldSale.id)
             closeHeldSalesDialog()
@@ -1049,48 +894,37 @@ class PosViewModel(
 
     // --- Checkout y Métodos de Venta ---
     fun updateAmountPaid(text: TextFieldValue) {
-        if (_showSaleSuccessOverlay.value) return // Evitar recálculos si la venta ya finalizó
+        if (showSaleSuccessOverlay.value) return 
         
         if (text.text.isEmpty() || text.text.all { it.isDigit() || it == '.' }) {
             _amountPaidText.value = text
             val amount = text.text.toDoubleOrNull() ?: 0.0
-            val currentTotal = currentSaleManager.total.value
-            _saleChange.value = if (amount > currentTotal) amount - currentTotal else 0.0
+            checkoutManager.updateChange(amount, currentSaleManager.total.value, _paymentMethod.value)
         }
     }
 
     fun prepareCheckout() {
         val totalAmount = currentSaleManager.total.value
         _amountPaidText.value = TextFieldValue(totalAmount.formatPrice(), TextRange(0, totalAmount.formatPrice().length))
-        _saleChange.value = 0.0 // Inicializamos en 0 ya que el texto predeterminado es el total
         _paymentMethod.value = "Efectivo"
         _saleComment.value = ""
-        _showSaleSuccessOverlay.value = false
+        checkoutManager.resetOverlay()
+        checkoutManager.updateChange(totalAmount, totalAmount, "Efectivo")
     }
 
     fun cancelCheckout() {
-        _saleChange.value = null
-        _showSaleSuccessOverlay.value = false
+        checkoutManager.resetOverlay()
         _paymentMethod.value = "Efectivo"
+        checkoutManager.updateChange(0.0, 0.0, "Tarjeta") // Ocultar cambio
     }
 
     fun setPaymentMethod(method: String) {
         _paymentMethod.value = method
-        if (method == "Efectivo") {
-            val amount = _amountPaidText.value.text.toDoubleOrNull() ?: 0.0
-            _saleChange.value = amount - currentSaleManager.total.value
-        } else {
-            _saleChange.value = null // Ocultar cambio si no es efectivo
-        }
-        
-        if (method == "Tarjeta") {
-            _mpStatus.value = "Listo para cobrar"
-        } else {
-            _mpStatus.value = null
-        }
+        val amount = _amountPaidText.value.text.toDoubleOrNull() ?: currentSaleManager.total.value
+        checkoutManager.updateChange(amount, currentSaleManager.total.value, method)
 
         // Si es crédito y no hay cliente, abrir buscador de clientes
-        if (method == "Crédito" && _selectedCustomer.value == null) {
+        if (method == "Crédito" && selectedCustomer.value == null) {
             openCustomerDialog()
         }
     }
@@ -1099,19 +933,17 @@ class PosViewModel(
 
     fun completeSale(shouldPrint: Boolean, onDone: () -> Unit) {
         if (currentItems.value.isEmpty()) return
-        if (_isProcessingSale.value) return
+        if (isProcessingSale.value) return
 
         viewModelScope.launch {
             val paymentMethod = _paymentMethod.value
             val isCredit = paymentMethod == "Crédito"
             
-            // 1. Validar permiso de crédito si aplica
             if (isCredit) {
                 if (hasPermission(Permission.SELL_ON_CREDIT)) {
                     // OK
                 } else if (isRestricted(Permission.SELL_ON_CREDIT)) {
                     requestAuthorization("Venta a Crédito") {
-                        // Re-ejecutar venta tras autorización
                         executeCompleteSale(shouldPrint, onDone)
                     }
                     return@launch
@@ -1121,276 +953,30 @@ class PosViewModel(
                 }
             }
 
-            // Si es venta normal o ya se validó el crédito
             executeCompleteSale(shouldPrint, onDone)
         }
     }
 
     private fun executeCompleteSale(shouldPrint: Boolean, onDone: () -> Unit) {
         viewModelScope.launch {
-            // 1. Validar que haya una caja seleccionada
-            if (_selectedTerminal.value == null) {
-                setErrorMessage("Debes seleccionar una caja (terminal) antes de cobrar.")
-                playErrorSound()
-                return@launch
-            }
-
-            val currentTotal = currentSaleManager.total.value
-            
-            // Capturar el monto pagado del texto de forma segura y robusta
             val rawPaidText = _amountPaidText.value.text.trim()
-            val amountPaid = if (rawPaidText.isEmpty() || rawPaidText == currentTotal.formatPrice().replace(",", "")) {
-                currentTotal
-            } else {
-                rawPaidText.toDoubleOrNull() ?: currentTotal
-            }
+            val currentTotal = total.value
+            val amountPaid = if (rawPaidText.isEmpty()) currentTotal else (rawPaidText.toDoubleOrNull() ?: currentTotal)
 
-            val paymentMethod = _paymentMethod.value
-            val isCredit = paymentMethod == "Crédito"
-            val isMP = paymentMethod == "Tarjeta"
-            val customerId = _selectedCustomer.value?.id
-
-            // --- LÓGICA DE MERCADO PAGO ---
-            if (isMP) {
-                if (mercadoPagoManager == null) {
-                    setErrorMessage("Servicio de Mercado Pago no inicializado.")
-                    return@launch
-                }
-
-                val settings = settingsRepository?.getAllSettings()?.first() ?: emptyMap()
-                val deviceId = settings["mp_terminal_id"] ?: ""
-                val accessToken = settings["mp_access_token"] ?: ""
-                
-                if (deviceId.isBlank() || accessToken.isBlank()) {
-                    setErrorMessage("Mercado Pago no configurado (Token o Terminal falta).")
-                    return@launch
-                }
-                
-                mercadoPagoManager.setCredentials(accessToken, "", "")
-
-                _isWaitingForMP.value = true
-                _mpStatus.value = "Conectando con terminal $deviceId..."
-                
-                val idempotencyKey = currentMpIdempotencyKey ?: "POS_${currentTimeMillis()}"
-                currentMpIdempotencyKey = idempotencyKey
-
-                val (success, intentId, externalRef) = mercadoPagoManager.sendPaymentToPoint(deviceId, currentTotal, "Venta POS", idempotencyKey)
-                
-                if (success) {
-                    _mpStatus.value = "Esperando aprobación en terminal..."
-                    var paid = false
-                    mpCancelRequested = false
-                    
-                    // Polling dual-channel por 120 segundos (más agresivo)
-                    val startTime = currentTimeMillis()
-                    var iteration = 0
-                    while (currentTimeMillis() - startTime < 120_000 && !mpCancelRequested) {
-                        iteration++
-                        
-                        // 1. Verificar estado del intento
-                        val result = mercadoPagoManager.checkPaymentStatus(intentId)
-                        if (result == "SUCCESS") { paid = true; break }
-                        if (result == "REJECTED" || result == "CANCELED" || result == "ERROR") {
-                            // Verificación extra antes de rechazar definitivamente
-                            val finalSearch = mercadoPagoManager.searchPaymentByReference(externalRef)
-                            if (finalSearch == "SUCCESS") { paid = true; break }
-                            break 
-                        }
-                        
-                        // 2. Fallback: Buscar pago por referencia
-                        if (iteration % 2 == 0 || (currentTimeMillis() - startTime > 100_000)) {
-                            val searchResult = mercadoPagoManager.searchPaymentByReference(externalRef)
-                            if (searchResult == "SUCCESS") { paid = true; break }
-                        }
-
-                        kotlinx.coroutines.delay(800)
-                    }
-                    
-                    if (mpCancelRequested) {
-                        // Verificación final inmediata en ambos canales
-                        val lastCheck = mercadoPagoManager.checkPaymentStatus(intentId)
-                        val lastSearch = mercadoPagoManager.searchPaymentByReference(externalRef)
-                        
-                        if (lastCheck == "SUCCESS" || lastSearch == "SUCCESS") {
-                            paid = true
-                        } else {
-                            _isWaitingForMP.value = false
-                            _isProcessingSale.value = false
-                            return@launch
-                        }
-                    }
-
-                    _isWaitingForMP.value = false
-                    if (!paid) {
-                        val status = _mpStatus.value ?: "desconocido"
-                        setErrorMessage("Pago no completado: $status")
-                        _isProcessingSale.value = false
-                        return@launch
-                    }
-                } else {
-                    _isWaitingForMP.value = false
-                    setErrorMessage("Error al conectar con Point: $intentId")
-                    return@launch
-                }
-            }
-
-            _isProcessingSale.value = true
-            try {
-                if (paymentMethod == "Efectivo" && amountPaid < (currentTotal - 0.01)) {
-                    setErrorMessage("El monto pagado ($${amountPaid.formatPrice()}) es insuficiente.")
-                    _isProcessingSale.value = false
-                    return@launch
-                }
-
-                if (paymentMethod == "Monedero") {
-                    val balance = _selectedCustomer.value?.walletBalance ?: 0.0
-                    if (balance < currentTotal) {
-                        setErrorMessage("Saldo insuficiente en monedero ($${balance.formatPrice()}).")
-                        _isProcessingSale.value = false
-                        return@launch
-                    }
-                }
-
-                // 2. Validar cliente para crédito
-                if (isCredit && customerId == null) {
-                    setErrorMessage("Debes seleccionar un cliente para realizar una venta a crédito.")
-                    _isProcessingSale.value = false
-                    return@launch
-                }
-
-                val now = currentTimeMillis()
-                val saleId = saleRepository.generateUniqueSaleId(branchId, _selectedTerminal.value?.id, prefix = _ticketConfig.value.ticketIdPrefix)
-                
-                // Cálculo estático y blindado del cambio final
-                val finalDiff = amountPaid - currentTotal
-                val calculatedChange = if (paymentMethod == "Efectivo" && finalDiff > 0.005) finalDiff else 0.0
-
-                val sale = Sale(
-                    id = saleId,
-                    timestamp = now,
-                    userId = _currentUser.value?.username ?: "admin",
-                    branchId = branchId,
-                    terminalId = _selectedTerminal.value?.id,
-                    customerId = customerId,
-                    items = currentItems.value,
-                    total = currentTotal,
-                    netTotal = currentItems.value.filter { !it.isService }.sumOf { it.subtotal },
-                    cashAmount = if (paymentMethod == "Efectivo") currentTotal else 0.0,
-                    creditAmount = if (isCredit) currentTotal else 0.0,
-                    receivedAmount = if (paymentMethod == "Efectivo") amountPaid else currentTotal,
-                    changeAmount = calculatedChange,
-                    paymentMethod = paymentMethod,
-                    comment = _saleComment.value,
-                    originalWebOrderId = currentSaleManager.currentWebOrderId.value
-                )
-
-                saleRepository.saveSale(sale)
-                
-                // IMPORTANTE: Primero establecemos el cambio y mostramos el overlay
-                _saleChange.value = calculatedChange
-                _showSaleSuccessOverlay.value = true
-                
-                // Limpiar la venta (Esto ya no sobreescribirá _saleChange porque lo bloqueamos arriba)
-                clearSale(isManual = false)
-                
-                successJob?.cancel()
-                successJob = viewModelScope.launch {
-                    delay(120000) // Esperar 2 minutos
-                    _showSaleSuccessOverlay.value = false
-                    _saleChange.value = null
-                    _showCardSuccess.value = false
-                }
-
-                // 3. Lógica de Monedero Electrónico (Acumulación y Pago)
-                if (customerId != null) {
-                    if (paymentMethod == "Monedero") {
-                        // Restar del monedero lo pagado
-                        customerRepository?.updateWalletBalance(customerId, -currentTotal)
-                    }
-
-                    val settings = settingsRepository?.getAllSettings()?.first() ?: emptyMap()
-                    var walletBonus = 0.0
-                    sale.items.forEach { item ->
-                        // Si se aplicó una promoción o descuento web, no genera monedero
-                        if (!item.isPromoApplied && !item.isWebDiscounted) {
-                            val percent = settings["wallet_percent_${item.category}"]?.toDoubleOrNull() ?: 0.0
-                            if (percent > 0) {
-                                walletBonus += item.subtotal * (percent / 100.0)
-                            }
-                        }
-                    }
-                    if (walletBonus > 0) {
-                        customerRepository?.updateWalletBalance(customerId, walletBonus)
-                    }
-                }
-
-                // 4. Actualizar deuda del cliente si es crédito
-                if (isCredit && customerId != null) {
-                    customerRepository?.updateDebt(customerId, currentTotal)
-                }
-
-                // Descontar stock de todos los productos (incluyendo pedidos web para mantener sincronía local)
-                sale.items.forEach { item ->
-                    if (!item.isService) {
-                        repository.decreaseStock(item.productId, branchId, item.quantity, _currentUser.value?.username ?: "admin", "Venta $saleId")
-                    }
-                }
-
-                // NUEVO: Generar Reporte de Cambios/Devoluciones si hay items negativos
-                val returns = sale.items.filter { it.quantity < 0 }
-                if (returns.isNotEmpty()) {
-                    returns.forEach { ret ->
-                        val productReturn = ProductReturn(
-                            id = "RET_${currentTimeMillis()}_${ret.productId}",
-                            timestamp = now,
-                            branchId = branchId,
-                            returnedItem = ret,
-                            userId = _currentUser.value?.username ?: "admin",
-                            difference = ret.subtotal // Esto es el saldo que aportó a favor
-                        )
-                        productReturnRepository?.saveReturn(productReturn)
-                    }
-                }
-
-                // 5. Si viene de un pedido web, marcarlo como entregado
-                currentSaleManager.currentWebOrderId.value?.let { webId ->
-                    val order = _webOrders.value.find { it.id == webId }
-                    if (order != null) {
-                        updateWebOrderStatus(order, WebOrderStatus.DELIVERED)
-                    }
-                }
-
-                _lastSale.value = sale
-                _lastSaleItems.value = sale.items
-                
-                if (shouldPrint) {
-                    val finalCustomer = if (customerId != null) customerRepository?.getCustomerById(customerId) else null
-                    // Abrir cajón solo si es pago en efectivo
-                    val openDrawer = _paymentMethod.value == "Efectivo"
-                    
-                    printerManager?.printTicket(
-                        sale, 
-                        sale.items, 
-                        openDrawer = openDrawer,
-                        walletBalance = finalCustomer?.walletBalance,
-                        config = _ticketConfig.value,
-                        branchName = _branchName.value
-                    )
-                } else if (_paymentMethod.value == "Efectivo") {
-                    // Si no imprime pero es efectivo, abrir cajón (caso F12)
-                    printerManager?.openDrawer()
-                }
-
-                if (paymentMethod != "Efectivo") {
-                    _showCardSuccess.value = true
-                }
-
-                onDone()
-            } catch (e: Exception) {
-                setErrorMessage("Error al procesar venta: ${e.message}")
-            } finally {
-                _isProcessingSale.value = false
-            }
+            checkoutManager.executeCheckout(
+                amountPaid = amountPaid,
+                paymentMethod = _paymentMethod.value,
+                branchId = branchId,
+                selectedTerminal = _selectedTerminal.value,
+                selectedCustomer = selectedCustomer.value,
+                currentUser = _currentUser.value,
+                saleComment = _saleComment.value,
+                ticketConfig = _ticketConfig.value,
+                branchName = _branchName.value,
+                shouldPrint = shouldPrint,
+                onDone = onDone,
+                onError = { setErrorMessage(it) }
+            )
         }
     }
 
@@ -1410,20 +996,8 @@ class PosViewModel(
 
     private fun startDeletionRequestsObservation() {
         firebaseManager?.observeDeletionRequests(branchId) { requests ->
-            // 1. Procesar aprobaciones (Cualquier dispositivo que vea una aprobación de su sucursal intenta borrar localmente)
-            val approved = requests.filter { it.status == "APPROVED" }
-            approved.forEach { req ->
-                viewModelScope.launch {
-                    // Borrar de la base de datos local si existe
-                    saleRepository.deleteHeldSale(req.ticketId)
-                    // Borrar de la nube (limpieza)
-                    firebaseManager?.deleteHeldSale(req.ticketId)
-                    // Finalmente borrar la solicitud
-                    firebaseManager?.deleteDeletionRequest(req.id)
-                }
-            }
-
-            // 2. Mostrar pendientes para el admin
+            // Ahora la eliminación local la maneja SyncManager de forma global.
+            // Aquí solo mostramos pendientes para el admin (Autorizaciones)
             val pending = requests.filter { it.status == "PENDING" }
             _deletionRequests.value = pending.sortedByDescending { it.timestamp }
             
@@ -1484,33 +1058,16 @@ class PosViewModel(
         val text = query.text
         
         // Quitar ventana de cambio al empezar a escribir algo nuevo
-        if (text.isNotEmpty() && _showSaleSuccessOverlay.value) {
-            _showSaleSuccessOverlay.value = false
-            _saleChange.value = null
-            successJob?.cancel()
+        if (text.isNotEmpty() && showSaleSuccessOverlay.value) {
+            checkoutManager.resetOverlay()
         }
         
         // Soporte para atajo instantáneo (ej: 15+)
         if (text.endsWith("+") && text.length > 1) {
             val part = text.removeSuffix("+")
             if (part.all { it.isDigit() || it == '.' }) {
-                val value = part.toDoubleOrNull() ?: 0.0
-                val items = currentItems.value
-                
-                // Si hay items en el carrito, el + actúa como actualizador de cantidad
-                if (items.isNotEmpty()) {
-                    var index = _selectedCartIndex.value
-                    if (index !in items.indices) index = items.size - 1
-                    val item = items[index]
-                    
-                    if (item.isBulk || (value % 1.0 == 0.0)) {
-                        currentSaleManager.updateItemQuantity(item, value)
-                        _searchQuery.value = TextFieldValue("")
-                        return
-                    }
-                }
-                
-                // Si no hay items o es para un producto nuevo, abrir diálogo de producto común
+                // Siempre abrir diálogo de producto común para el atajo "precio+"
+                // Se eliminó la actualización de cantidad con "+" para evitar conflictos con precios
                 openCommonWithShortcut(part)
                 _searchQuery.value = TextFieldValue("")
                 return
@@ -1536,10 +1093,7 @@ class PosViewModel(
         }
         
         // Quitar ventana de cambio si se inicia nueva búsqueda
-        _showSaleSuccessOverlay.value = false
-        _saleChange.value = null
-        _showCardSuccess.value = false
-        successJob?.cancel()
+        checkoutManager.resetOverlay()
 
         var multiplier: Double? = null
         var query = rawQuery
@@ -1561,7 +1115,7 @@ class PosViewModel(
             viewModelScope.launch {
                 val customer = customerRepository?.getCustomerById(customerId)
                 if (customer != null) {
-                    _selectedCustomer.value = customer
+                    selectCustomer(customer)
                     onSearchQueryClear()
                 } else {
                     _notFoundQuery.value = query
@@ -1655,9 +1209,7 @@ class PosViewModel(
         _searchMultiplier.value = null
         
         // También quitar ventana de cambio si se limpia el buscador
-        _showSaleSuccessOverlay.value = false
-        _saleChange.value = null
-        successJob?.cancel()
+        checkoutManager.resetOverlay()
     }
 
     fun moveFocus(delta: Int) {
@@ -1721,12 +1273,7 @@ class PosViewModel(
     }
 
     fun addProduct(product: Product, stock: Double, quantity: Double? = null, isReturn: Boolean = false) {
-        if (_showSaleSuccessOverlay.value) {
-            _showSaleSuccessOverlay.value = false
-            _saleChange.value = null
-            _showCardSuccess.value = false
-            successJob?.cancel()
-        }
+        checkoutManager.resetOverlay()
         
         val added = currentSaleManager.addItem(product, branchId, stock, quantity, isReturn = isReturn)
         if (added) {
@@ -1751,9 +1298,8 @@ class PosViewModel(
             currentSaleManager.clear()
             _searchQuery.value = TextFieldValue("")
             _amountPaidText.value = TextFieldValue("") // Limpiar monto pagado
-            _selectedCustomer.value = null
+            selectCustomer(null)
             _saleComment.value = ""
-            currentMpIdempotencyKey = null
         }
 
         if (!isManual || hasPermission(Permission.CANCEL_SALE)) {
@@ -1822,8 +1368,7 @@ class PosViewModel(
         selectSearchQuery()
     }
     fun clearChange() { 
-        _saleChange.value = null 
-        _showCardSuccess.value = false
+        checkoutManager.resetOverlay()
     }
     fun reprintLastSale() {
         val sale = _lastSale.value ?: return
@@ -1877,171 +1422,47 @@ class PosViewModel(
     }
 
     // --- Caja y Movimientos ---
-    private val _showCashMovementDialog = MutableStateFlow<CashMovementType?>(null)
-    val showCashMovementDialog = _showCashMovementDialog.asStateFlow()
+    val showCashMovementDialog = cashManager.showCashMovementDialog
+    val showWithdrawalDialog = cashManager.showWithdrawalDialog
+    val isProcessingWithdrawal = cashManager.isProcessingWithdrawal
 
-    fun openCashMovementDialog(type: CashMovementType) { _showCashMovementDialog.value = type }
-    fun closeCashMovementDialog() { _showCashMovementDialog.value = null }
+    fun openCashMovementDialog(type: CashMovementType) = cashManager.openCashMovementDialog(type)
+    fun closeCashMovementDialog() = cashManager.closeCashMovementDialog()
 
     fun addCashMovement(amount: Double, reason: String, isManual: Boolean = true) {
-        val type = _showCashMovementDialog.value ?: (if (amount >= 0) CashMovementType.IN else CashMovementType.OUT)
-        val absAmount = abs(amount)
-        if (isManual && type == CashMovementType.OUT && absAmount > (_cashInDrawer.value + 0.01)) {
-            setErrorMessage("Fondo insuficiente ($${_cashInDrawer.value.formatPrice()})")
-            playErrorSound()
-            return
-        }
-        viewModelScope.launch {
-            val movId = "M-${branchId}-${_selectedTerminal.value?.id ?: "0"}-${currentTimeMillis()}"
-            val movement = CashMovement(
-                id = movId,
-                timestamp = currentTimeMillis(),
-                branchId = branchId,
-                terminalId = _selectedTerminal.value?.id,
-                type = type,
-                amount = absAmount,
-                reason = reason,
-                userId = _currentUser.value?.username ?: "admin"
-            )
-            cashMovementRepository?.saveMovement(movement)
-            
-            // Abrir cajón para cualquier movimiento de efectivo (Entrada o Salida)
-            openCashDrawer()
+        cashManager.addCashMovement(
+            amount = amount,
+            reason = reason,
+            branchId = branchId,
+            selectedTerminal = _selectedTerminal.value,
+            currentUser = _currentUser.value,
+            cashInDrawer = _cashInDrawer.value,
+            isManual = isManual,
+            onError = { setErrorMessage(it) },
+            onSuccess = { setWarningMessage(it) }
+        )
+    }
 
-            if (isManual) {
-                setWarningMessage("${if(type == CashMovementType.IN) "Entrada" else "Salida"} registrada.")
-                closeCashMovementDialog()
-            }
-        }
+    fun openWithdrawalDialog() = cashManager.openWithdrawalDialog()
+    fun closeWithdrawalDialog() = cashManager.closeWithdrawalDialog()
+
+    fun processWithdrawal(withdrawalAmount: Double, commission: Double, commissionInCash: Boolean) {
+        cashManager.processWithdrawal(
+            withdrawalAmount = withdrawalAmount,
+            commission = commission,
+            commissionInCash = commissionInCash,
+            branchId = branchId,
+            selectedTerminal = _selectedTerminal.value,
+            currentUser = _currentUser.value,
+            cashInDrawer = _cashInDrawer.value,
+            onError = { setErrorMessage(it) },
+            onSuccess = { setWarningMessage(it) }
+        )
     }
 
     // --- Devoluciones / Cambios ---
     private val _showReturnDialog = MutableStateFlow(false)
     val showReturnDialog = _showReturnDialog.asStateFlow()
-
-    // --- Retiros de Efectivo (Tarjeta) ---
-    private val _showWithdrawalDialog = MutableStateFlow(false)
-    val showWithdrawalDialog = _showWithdrawalDialog.asStateFlow()
-
-    private val _isProcessingWithdrawal = MutableStateFlow(false)
-    val isProcessingWithdrawal = _isProcessingWithdrawal.asStateFlow()
-
-    fun openWithdrawalDialog() { _showWithdrawalDialog.value = true }
-    fun closeWithdrawalDialog() { 
-        _showWithdrawalDialog.value = false 
-        currentMpIdempotencyKey = null
-    }
-
-    fun processWithdrawal(withdrawalAmount: Double, commission: Double, commissionInCash: Boolean) {
-        if (_isProcessingWithdrawal.value) return
-        
-        viewModelScope.launch {
-            if (_selectedTerminal.value == null) {
-                setErrorMessage("Debes seleccionar una caja (terminal) para registrar el retiro.")
-                return@launch
-            }
-
-            if (mercadoPagoManager == null) {
-                setErrorMessage("Mercado Pago no está configurado.")
-                return@launch
-            }
-
-            if (withdrawalAmount > _cashInDrawer.value) {
-                setErrorMessage("No hay suficiente efectivo en caja para este retiro.")
-                return@launch
-            }
-
-            _isProcessingWithdrawal.value = true
-            try {
-                val settings = settingsRepository?.getAllSettings()?.first() ?: emptyMap()
-                val deviceId = settings["mp_terminal_id"] ?: ""
-                
-                if (deviceId.isBlank()) {
-                    setErrorMessage("Terminal Point no configurada.")
-                    _isProcessingWithdrawal.value = false
-                    return@launch
-                }
-
-                // Cantidad a cobrar en la tarjeta
-                val chargeAmount = if (commissionInCash) withdrawalAmount else (withdrawalAmount + commission)
-                
-                _mpStatus.value = "Iniciando cobro en tarjeta de $${chargeAmount.formatPrice()}..."
-                
-                val idempotencyKey = currentMpIdempotencyKey ?: "WDR_${currentTimeMillis()}"
-                currentMpIdempotencyKey = idempotencyKey
-
-                val (success, intentId, externalRef) = mercadoPagoManager.sendPaymentToPoint(deviceId, chargeAmount, "Retiro de Efectivo", idempotencyKey)
-                
-                if (success) {
-                    _mpStatus.value = "Esperando aprobación en terminal..."
-                    var approved = false
-                    mpCancelRequested = false
-                    
-                    val startTime = currentTimeMillis()
-                    var iteration = 0
-                    while (currentTimeMillis() - startTime < 120_000 && !mpCancelRequested) {
-                        iteration++
-                        
-                        val result = mercadoPagoManager.checkPaymentStatus(intentId)
-                        if (result == "SUCCESS") { approved = true; break }
-                        if (result == "REJECTED" || result == "CANCELED" || result == "ERROR") {
-                            val finalSearch = mercadoPagoManager.searchPaymentByReference(externalRef)
-                            if (finalSearch == "SUCCESS") { approved = true; break }
-                            break 
-                        }
-                        
-                        if (iteration % 2 == 0) {
-                            val searchResult = mercadoPagoManager.searchPaymentByReference(externalRef)
-                            if (searchResult == "SUCCESS") { approved = true; break }
-                            if (searchResult == "REJECTED") {
-                                val lastCheck = mercadoPagoManager.checkPaymentStatus(intentId)
-                                if (lastCheck == "SUCCESS") { approved = true; break }
-                                break
-                            }
-                        }
-
-                        kotlinx.coroutines.delay(600)
-                    }
-
-                    if (mpCancelRequested) {
-                        // Verificación de seguridad inmediata en ambos canales
-                        val lastCheck = mercadoPagoManager.checkPaymentStatus(intentId)
-                        val lastSearch = mercadoPagoManager.searchPaymentByReference(externalRef)
-                        
-                        if (lastCheck == "SUCCESS" || lastSearch == "SUCCESS") {
-                            approved = true
-                        } else {
-                            _isWaitingForMP.value = false
-                            return@launch
-                        }
-                    }
-
-                    if (approved) {
-                        // 1. SALIDA de caja por el monto que se le da al cliente (Monto negativo para OUT)
-                        addCashMovement(-withdrawalAmount, "Retiro de efectivo (Tarjeta)", isManual = false)
-                        
-                        // 2. Si la comisión se pagó en EFECTIVO, registrar ENTRADA (Monto positivo para IN)
-                        if (commissionInCash) {
-                            addCashMovement(commission, "Comisión por retiro (Efectivo)", isManual = false)
-                        }
-
-                        setWarningMessage("Retiro procesado correctamente.\nEntrega $${withdrawalAmount.formatPrice()} al cliente.")
-                        closeWithdrawalDialog()
-                    } else {
-                        val status = _mpStatus.value ?: "desconocido"
-                        setErrorMessage("Cobro en tarjeta no completado: $status")
-                    }
-                } else {
-                    setErrorMessage("Error al conectar con Point: $intentId")
-                }
-            } catch (e: Exception) {
-                setErrorMessage("Error en retiro: ${e.message}")
-            } finally {
-                _isProcessingWithdrawal.value = false
-                _mpStatus.value = null
-            }
-        }
-    }
 
     suspend fun findProductForReturn(query: String): Product? {
         val trimmed = query.trim()

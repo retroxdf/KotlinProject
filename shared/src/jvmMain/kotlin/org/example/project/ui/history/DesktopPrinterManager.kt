@@ -59,8 +59,8 @@ class DesktopPrinterManager : PrinterManager {
     ) {
         if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
             sendEscPos { outputStream ->
-                // 1. Abrir Cajón (ANTES de imprimir)
-                if (openDrawer && openDrawerOnPrint) {
+                // 1. Abrir Cajón (REGLA: Si se pide abrir, ignoramos el switch global para esta acción específica)
+                if (openDrawer) {
                     outputStream.write(getDrawerCommandBytes())
                 }
 
@@ -84,7 +84,7 @@ class DesktopPrinterManager : PrinterManager {
             // Esto evita que el spooler de Windows ignore comandos ESC/POS mezclados con texto.
             
             // 1. Abrir Cajón (ANTES de imprimir como se solicitó)
-            if (openDrawer && openDrawerOnPrint) {
+            if (openDrawer) {
                 openDrawer()
             }
 
@@ -315,6 +315,26 @@ class DesktopPrinterManager : PrinterManager {
             sendRawToSystemPrinter(bytes)
         } else {
             println("Desktop: Prueba a $printerName")
+        }
+    }
+
+    override fun printRawText(text: String, openDrawer: Boolean) {
+        val contentBytes = text.toByteArray(Charsets.ISO_8859_1)
+        if (connectionType == "NETWORK" || connectionType == "BLUETOOTH" || connectionType == "SERIAL") {
+            sendEscPos { outputStream ->
+                if (openDrawer) outputStream.write(getDrawerCommandBytes())
+                outputStream.write(contentBytes)
+                if (autoCut) outputStream.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
+            }
+        } else if (connectionType == "SYSTEM") {
+            val baos = java.io.ByteArrayOutputStream()
+            baos.write(byteArrayOf(0x1B, 0x40)) // Reset
+            if (openDrawer) baos.write(getDrawerCommandBytes())
+            baos.write(contentBytes)
+            if (autoCut) baos.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
+            sendRawToSystemPrinter(baos.toByteArray())
+        } else {
+            println("Desktop RAW: $text")
         }
     }
 

@@ -1726,54 +1726,61 @@ fun DeletionRequestsSubMenu(viewModel: PosViewModel, onBack: () -> Unit) {
                 Text("No hay solicitudes pendientes.", color = Color.Gray)
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                items(requests) { request ->
-                    val isProcessing = processingTicketIds.contains(request.ticketId)
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column {
-                                    Text("Solicitado por: @${request.userId}", fontWeight = FontWeight.Bold)
-                                    val dt = Instant.fromEpochMilliseconds(request.timestamp).toLocalDateTime(TimeZone.currentSystemDefault())
-                                    Text("${dt.date} ${dt.time.toString().take(5)}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                }
-                                Text("$${request.total.formatPrice()}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-                            }
-                            
-                            Spacer(Modifier.height(8.dp))
-                            Text("Contenido:", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                            Text(request.itemsSummary, style = MaterialTheme.typography.bodySmall)
-                            
-                            Spacer(Modifier.height(16.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Button(
-                                    onClick = { 
-                                        processingTicketIds += request.ticketId
-                                        viewModel.approveDeletionRequest(request) 
-                                        successMsg = "Ticket eliminado correctamente."
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    enabled = !isProcessing,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                                ) {
-                                    if (isProcessing) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-                                    else {
-                                        Icon(Icons.Default.Check, null)
-                                        Spacer(Modifier.width(8.dp))
-                                        Text("APROBAR Y BORRAR")
+            val visibleRequests = requests.filter { !processingTicketIds.contains(it.ticketId) }
+            if (visibleRequests.isEmpty() && requests.isNotEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    items(visibleRequests) { request ->
+                        val isProcessing = processingTicketIds.contains(request.ticketId)
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column {
+                                        Text("Solicitado por: @${request.userId}", fontWeight = FontWeight.Bold)
+                                        val dt = Instant.fromEpochMilliseconds(request.timestamp).toLocalDateTime(TimeZone.currentSystemDefault())
+                                        Text("${dt.date} ${dt.time.toString().take(5)}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                                     }
+                                    Text("$${request.total.formatPrice()}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
                                 }
-                                OutlinedButton(
-                                    onClick = { 
-                                        processingTicketIds += request.ticketId
-                                        viewModel.rejectDeletionRequest(request) 
-                                        successMsg = "Solicitud rechazada."
-                                    },
-                                    enabled = !isProcessing,
-                                    modifier = Modifier.weight(0.5f),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
-                                ) {
-                                    Text("RECHAZAR")
+                                
+                                Spacer(Modifier.height(8.dp))
+                                Text("Contenido:", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                                Text(request.itemsSummary, style = MaterialTheme.typography.bodySmall)
+                                
+                                Spacer(Modifier.height(16.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Button(
+                                        onClick = { 
+                                            processingTicketIds += request.ticketId
+                                            viewModel.approveDeletionRequest(request) 
+                                            successMsg = "Ticket aprobado. Se eliminará en la terminal de origen."
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        enabled = !isProcessing,
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                    ) {
+                                        if (isProcessing) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                                        else {
+                                            Icon(Icons.Default.Check, null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("APROBAR Y BORRAR")
+                                        }
+                                    }
+                                    OutlinedButton(
+                                        onClick = { 
+                                            processingTicketIds += request.ticketId
+                                            viewModel.rejectDeletionRequest(request) 
+                                            successMsg = "Solicitud rechazada."
+                                        },
+                                        enabled = !isProcessing,
+                                        modifier = Modifier.weight(0.5f),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
+                                    ) {
+                                        Text("RECHAZAR")
+                                    }
                                 }
                             }
                         }

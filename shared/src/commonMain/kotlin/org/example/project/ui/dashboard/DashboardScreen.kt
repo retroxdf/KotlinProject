@@ -80,7 +80,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
                 val statsList = listOf(
                     Triple("Ventas Totales", "$${stats.totalSales.formatPrice()}", Icons.Default.TrendingUp to Color(0xFF2E7D32)),
                     Triple("Gastos", "$${stats.totalExpenses.formatPrice()}", Icons.Default.TrendingDown to Color.Red),
-                    Triple("Ganancia Neta", "$${stats.netProfit.formatPrice()}", Icons.Default.AccountBalanceWallet to Color(0xFF2196F3))
+                    Triple("Ganancia Neta", "$${stats.netProfit.formatPrice()}", Icons.Default.AccountBalanceWallet to MaterialTheme.colorScheme.primary)
                 )
                 
                 statsList.chunked(gridCols).forEach { rowStats ->

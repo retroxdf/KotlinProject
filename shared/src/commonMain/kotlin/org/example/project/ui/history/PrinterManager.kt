@@ -67,6 +67,11 @@ interface PrinterManager {
     fun printTestPage()
 
     /**
+     * Imprime texto plano (RAW) con comandos básicos.
+     */
+    fun printRawText(text: String, openDrawer: Boolean = false)
+
+    /**
      * Obtiene dispositivos vinculados (Bluetooth).
      */
     fun getPairedDevices(): List<Pair<String, String>>
@@ -297,6 +302,10 @@ class MockPrinterManager : PrinterManager {
 
     override fun printTestPage() {
         println("=== PÁGINA DE PRUEBA EN: $printerName ===")
+    }
+
+    override fun printRawText(text: String, openDrawer: Boolean) {
+        println("=== RAW PRINT: $text | Drawer: $openDrawer ===")
     }
 
     override fun getPairedDevices(): List<Pair<String, String>> = emptyList()

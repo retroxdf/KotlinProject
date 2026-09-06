@@ -61,16 +61,18 @@ fun CheckoutScreen(
     Scaffold(
         modifier = Modifier.onPreviewKeyEvent { event ->
             if (event.type == KeyEventType.KeyDown) {
+                val isActionEnabled = !isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || amountPaidText.text.isEmpty() || (saleChange ?: 0.0) >= -0.01)
+                
                 when (event.key) {
                     Key.F1 -> { 
-                        if (!isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || (saleChange ?: -1.0) >= 0)) {
+                        if (isActionEnabled) {
                             viewModel.completeSale(shouldPrint = true, onDone = onCancel)
                         }
                         true 
                     }
                     Key.F12 -> { 
-                        // F12 termina la venta sin imprimir (abre cajón solo si es Efectivo, manejado en ViewModel)
-                        if (!isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || (saleChange ?: -1.0) >= 0)) {
+                        // F12 ahora activo para TODOS los métodos: Registra sin imprimir
+                        if (isActionEnabled) {
                             viewModel.completeSale(shouldPrint = false, onDone = onCancel)
                         }
                         true 
@@ -81,7 +83,7 @@ fun CheckoutScreen(
                         true 
                     }
                     Key.Enter, Key.NumPadEnter -> {
-                        if (!isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || (saleChange ?: -1.0) >= 0)) {
+                        if (isActionEnabled) {
                             viewModel.completeSale(shouldPrint = true, onDone = onCancel)
                         }
                         true
@@ -163,10 +165,12 @@ fun CheckoutScreen(
                         
                         // BOTONES DE ACCIÓN (Móvil)
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val isActionEnabled = !isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || amountPaidText.text.isEmpty() || (saleChange ?: 0.0) >= -0.01)
+
                             Button(
                                 onClick = { viewModel.completeSale(shouldPrint = true, onDone = onCancel) },
                                 modifier = Modifier.fillMaxWidth().height(60.dp),
-                                enabled = !isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || (saleChange ?: -1.0) >= 0),
+                                enabled = isActionEnabled,
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                             ) {
@@ -183,12 +187,15 @@ fun CheckoutScreen(
                                 ) { Text("CRÉDITO", style = MaterialTheme.typography.labelMedium) }
 
                                 Button(
-                                    onClick = { viewModel.completeSale(false, onDone = onCancel); viewModel.openCashDrawer() },
+                                    onClick = { viewModel.completeSale(shouldPrint = false, onDone = onCancel) },
                                     modifier = Modifier.weight(1f).height(50.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color.DarkGray,
+                                        disabledContainerColor = Color.LightGray.copy(alpha = 0.5f)
+                                    ),
                                     shape = RoundedCornerShape(8.dp),
-                                    enabled = !isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || (saleChange ?: -1.0) >= 0)
-                                ) { Text("SOLO CAJÓN", style = MaterialTheme.typography.labelMedium) }
+                                    enabled = isActionEnabled
+                                ) { Text(if (paymentMethod == "Efectivo") "SOLO CAJÓN" else "REGISTRAR", style = MaterialTheme.typography.labelMedium) }
                             }
                         }
                     }
@@ -295,11 +302,17 @@ fun CheckoutScreen(
 
                         // BOTONES DE ACCIÓN (F1, F12, F4)
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            val isActionEnabled = !isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || amountPaidText.text.isEmpty() || (saleChange ?: 0.0) >= -0.01)
+
                             Button(
                                 onClick = { viewModel.setPaymentMethod("Crédito"); viewModel.completeSale(true, onCancel) },
                                 modifier = Modifier.weight(1f).height(64.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7)),
-                                shape = RoundedCornerShape(12.dp)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF673AB7),
+                                    disabledContainerColor = Color.LightGray.copy(alpha = 0.5f)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = !isProcessing && !isWaitingMP
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("F4", fontWeight = FontWeight.Black)
@@ -310,25 +323,30 @@ fun CheckoutScreen(
                             Button(
                                 onClick = { 
                                     viewModel.completeSale(shouldPrint = false, onDone = onCancel)
-                                    viewModel.openCashDrawer()
                                 },
                                 modifier = Modifier.weight(1f).height(64.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.DarkGray,
+                                    disabledContainerColor = Color.LightGray.copy(alpha = 0.5f)
+                                ),
                                 shape = RoundedCornerShape(12.dp),
-                                enabled = !isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || (saleChange ?: -1.0) >= 0)
+                                enabled = isActionEnabled
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("F12", fontWeight = FontWeight.Black)
-                                    Text("SOLO CAJÓN", style = MaterialTheme.typography.labelSmall)
+                                    Text(if (paymentMethod == "Efectivo") "SOLO CAJÓN" else "SOLO REGISTRAR", style = MaterialTheme.typography.labelSmall)
                                 }
                             }
 
                             Button(
                                 onClick = { viewModel.completeSale(shouldPrint = true, onDone = onCancel) },
                                 modifier = Modifier.weight(2f).height(64.dp),
-                                enabled = !isProcessing && !isWaitingMP && (paymentMethod != "Efectivo" || (saleChange ?: -1.0) >= 0),
+                                enabled = isActionEnabled,
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4CAF50),
+                                    disabledContainerColor = Color.LightGray.copy(alpha = 0.5f)
+                                )
                             ) {
                                 if (isProcessing || isWaitingMP) {
                                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))

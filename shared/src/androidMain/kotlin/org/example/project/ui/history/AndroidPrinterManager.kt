@@ -236,6 +236,17 @@ class AndroidPrinterManager : PrinterManager {
         }
     }
 
+    override fun printRawText(text: String, openDrawer: Boolean) {
+        val action: (OutputStream) -> Unit = {
+            if (openDrawer) it.write(byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte()))
+            it.write(text.toByteArray(Charsets.ISO_8859_1))
+            it.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A))
+            if (autoCut) it.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
+        }
+        if (connectionType == "BLUETOOTH") printViaBluetooth(action)
+        else if (connectionType == "NETWORK") printViaNetwork(action)
+    }
+
     @SuppressLint("MissingPermission")
     override fun getPairedDevices(): List<Pair<String, String>> {
         val adapter = BluetoothAdapter.getDefaultAdapter() ?: return emptyList()

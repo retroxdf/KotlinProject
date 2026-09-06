@@ -116,554 +116,463 @@ fun PosMainScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            BoxWithConstraints {
-                val isCompact = maxWidth < 700.dp
-                if (!isCompact) { // Solo mostrar TopBar en Desktop/Tablet grande
-                    TopAppBar(
-                        title = { Text("Venta", fontWeight = FontWeight.Black) },
-                        actions = {
-                            IconButton(onClick = { viewModel.refreshCatalog() }) {
-                                Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.primary)
-                            }
-                            var showPosMenu by remember { mutableStateOf(false) }
-                            Box {
-                                IconButton(onClick = { showPosMenu = true }) {
-                                    Icon(Icons.Default.MoreVert, "Opciones de Venta")
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isCompact = maxWidth < 700.dp
+        val isExtended = maxWidth > 1200.dp
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            // --- ÁREA IZQUIERDA (CONTENIDO PRINCIPAL) ---
+            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                // Buscador
+                Row(modifier = Modifier.fillMaxWidth().padding(if (isCompact) 8.dp else 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (terminals.isNotEmpty()) {
+                        var showTerminalMenu by remember { mutableStateOf(false) }
+                        Box(modifier = Modifier.padding(end = 8.dp)) {
+                            InputChip(
+                                selected = selectedTerminal != null,
+                                onClick = { showTerminalMenu = true },
+                                label = { Text(selectedTerminal?.name ?: "CAJA", fontWeight = FontWeight.Bold, maxLines = 1) },
+                                leadingIcon = { Icon(Icons.Default.Store, null, modifier = Modifier.size(18.dp), tint = if (selectedTerminal == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) },
+                                colors = InputChipDefaults.inputChipColors(containerColor = if (selectedTerminal == null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant),
+                                border = if (selectedTerminal == null) BorderStroke(2.dp, MaterialTheme.colorScheme.error) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                            )
+                            DropdownMenu(expanded = showTerminalMenu, onDismissRequest = { showTerminalMenu = false }) {
+                                DropdownMenuItem(text = { Text("SIN CAJA SELECCIONADA") }, onClick = { viewModel.selectTerminal(null); showTerminalMenu = false })
+                                terminals.forEach { terminal ->
+                                    DropdownMenuItem(text = { Text(terminal.name) }, onClick = { viewModel.selectTerminal(terminal); showTerminalMenu = false }, leadingIcon = { if (terminal.id == selectedTerminal?.id) Icon(Icons.Default.Check, null) })
                                 }
-                                DropdownMenu(
-                                    expanded = showPosMenu, 
-                                    onDismissRequest = { showPosMenu = false }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { viewModel.onSearchQueryChange(it) },
+                        modifier = Modifier.weight(1f).focusRequester(focusRequester).onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown) {
+                                if (event.isAltPressed && event.key == Key.V) { onNavigateToCheckout(); true }
+                                else if (event.isAltPressed && event.key == Key.W) { viewModel.putSaleOnHold(); true }
+                                else if (event.isAltPressed && event.key == Key.G) { viewModel.openHeldSalesDialog(); true }
+                                else if (event.isAltPressed && event.key == Key.R) { viewModel.openWithdrawalDialog(); true }
+                                else if (event.isAltPressed && event.key == Key.C) { viewModel.openCustomerDialog(); true }
+                                else if (event.isAltPressed && event.key == Key.D) { viewModel.openReturnDialog(); true }
+                                else if (event.isAltPressed && event.key == Key.P) { viewModel.openCommentDialog(); true }
+                                else if (event.isAltPressed && event.key == Key.N) { viewModel.openCashDrawer(); true }
+                                else if (event.isAltPressed && event.key == Key.I) { viewModel.reprintLastSale(); true }
+                                else if (event.isAltPressed && event.key == Key.A) { viewModel.openDebtPaymentDialog(); true }
+                                else if (event.isAltPressed && event.key == Key.E) { viewModel.openMultiserviceDialog(); true }
+                                else if (event.isAltPressed && event.key == Key.F) { viewModel.openCommonProductDialog(); true }
+                                else if (event.isAltPressed && event.key == Key.K) { viewModel.openPreCutDialog(); true }
+                                else {
+                                    when (event.key) {
+                                        Key.Plus, Key.NumPadAdd -> {
+                                            val text = searchQuery.text
+                                            if (text.isNotEmpty() && text.all { it.isDigit() || it == '.' }) { viewModel.openCommonWithShortcut(text); true } else false
+                                        }
+                                        Key.DirectionDown -> { viewModel.moveFocus(1); true }
+                                        Key.DirectionUp -> { viewModel.moveFocus(-1); true }
+                                        Key.DirectionRight -> { viewModel.incrementSelectedCartItem(); true }
+                                        Key.DirectionLeft -> { viewModel.decrementSelectedCartItem(); true }
+                                        Key.Enter, Key.NumPadEnter -> { if (showSearchResults) viewModel.selectCurrentItem() else viewModel.onSearchSubmit(); true }
+                                        Key.Delete -> {
+                                            if (currentFocusArea == PosViewModel.FocusArea.CART) {
+                                                if (selectedCartIndex in items.indices) { viewModel.removeSaleItem(items[selectedCartIndex]); true } else false
+                                            } else if (currentFocusArea == PosViewModel.FocusArea.SEARCH_BAR) { viewModel.clearSale(); true } else false
+                                        }
+                                        Key.Escape -> { 
+                                            if (showSearchResults) {
+                                                viewModel.onSearchQueryClear()
+                                            } else if (items.isNotEmpty()) {
+                                                onNavigateToCheckout()
+                                            } else {
+                                                viewModel.onSearchQueryClear()
+                                                viewModel.selectSearchQuery()
+                                            }
+                                            true 
+                                        }
+                                        else -> false
+                                    }
+                                }
+                            } else false
+                        },
+                        placeholder = { Text("Escanea código o busca por nombre...") },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search, keyboardType = KeyboardType.Text, autoCorrect = false),
+                        keyboardActions = KeyboardActions(onSearch = { viewModel.onSearchSubmit() }, onDone = { viewModel.onSearchSubmit() })
+                    )
+                }
+
+                // Carrito
+                val contentModifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+                if (isCompact) {
+                    Column(modifier = contentModifier) {
+                        Text("Carrito (${items.size} ítems)", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.outline)
+                        if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin productos", color = Color.Gray) }
+                        else LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            itemsIndexed(items) { index, item ->
+                                val isSelected = index == selectedCartIndex && currentFocusArea == PosViewModel.FocusArea.CART
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().background(if (isSelected) Color(0xFF2196F3) else Color.Transparent).clickable { viewModel.setSelectedCartIndex(index); viewModel.setFocusArea(PosViewModel.FocusArea.CART) }.padding(vertical = 8.dp, horizontal = 4.dp), 
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Traer Cliente (Alt + C)") },
-                                        leadingIcon = { Icon(Icons.Default.People, null, tint = Color(0xFF673AB7)) },
-                                        onClick = { showPosMenu = false; viewModel.openCustomerDialog() }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Poner en Espera (Alt + W)") }, 
-                                        leadingIcon = { Icon(Icons.Default.Pause, null, tint = Color(0xFFFFA500)) }, 
-                                        onClick = { showPosMenu = false; viewModel.putSaleOnHold() }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Retiro de Efectivo (Alt + R)") },
-                                        leadingIcon = { Icon(Icons.Default.Atm, null, tint = Color(0xFF2196F3)) },
-                                        onClick = { showPosMenu = false; viewModel.openWithdrawalDialog() }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Tickets Guardados (Alt + G)") }, 
-                                        leadingIcon = { Icon(Icons.Default.Save, null, tint = Color(0xFF2196F3)) }, 
-                                        onClick = { showPosMenu = false; viewModel.openHeldSalesDialog() }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Devolución / Cambio (Alt + D)") }, 
-                                        leadingIcon = { Icon(Icons.Default.SyncAlt, null, tint = Color(0xFFE91E63)) }, 
-                                        onClick = { showPosMenu = false; viewModel.openReturnDialog() }
-                                    )
-                                    HorizontalDivider()
-                                    DropdownMenuItem(
-                                        text = { Text("Comentarios Ticket (Alt + P)") }, 
-                                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Notes, null, tint = Color(0xFF2196F3)) }, 
-                                        onClick = { showPosMenu = false; viewModel.openCommentDialog() }
-                                    )
-                                    HorizontalDivider()
-                                    DropdownMenuItem(
-                                        text = { Text("Abrir Cajón (Alt + N)") }, 
-                                        leadingIcon = { Icon(Icons.Default.LockOpen, null, tint = Color.Gray) }, 
-                                        onClick = { showPosMenu = false; viewModel.openCashDrawer() }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Reimprimir Última (Alt + I)") }, 
-                                        leadingIcon = { Icon(Icons.Default.Print, null, tint = Color(0xFF4CAF50)) }, 
-                                        onClick = { showPosMenu = false; viewModel.reprintLastSale() }
-                                    )
-                                    HorizontalDivider()
-                                    DropdownMenuItem(
-                                        text = { Text("Abonos / Deuda (Alt + A)") },
-                                        leadingIcon = { Icon(Icons.Default.Payments, null, tint = Color(0xFF4CAF50)) },
-                                        onClick = { showPosMenu = false; viewModel.openDebtPaymentDialog() }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Pago Servicios (Alt + E)") },
-                                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, null, tint = Color(0xFF2196F3)) },
-                                        onClick = { showPosMenu = false; viewModel.openMultiserviceDialog() }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Producto Común (Alt + F)") },
-                                        leadingIcon = { Icon(Icons.Default.FlashOn, null, tint = Color(0xFF64DD17)) },
-                                        onClick = { showPosMenu = false; viewModel.openCommonProductDialog() }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Realizar Precorte (Alt + K)") }, 
-                                        leadingIcon = { Icon(Icons.Default.Analytics, null, tint = Color(0xFF2196F3)) }, 
-                                        onClick = { showPosMenu = false; viewModel.openPreCutDialog() }
-                                    )
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-        },
-    ) { padding ->
-        BoxWithConstraints(modifier = Modifier.padding(padding).fillMaxSize()) {
-            val isCompact = maxWidth < 700.dp
-            val isExtended = maxWidth > 1200.dp
-
-            Row(modifier = Modifier.fillMaxSize()) {
-                // --- ÁREA IZQUIERDA (CONTENIDO PRINCIPAL) ---
-                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    // Buscador
-                    Row(modifier = Modifier.fillMaxWidth().padding(if (isCompact) 8.dp else 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (terminals.isNotEmpty()) {
-                            var showTerminalMenu by remember { mutableStateOf(false) }
-                            Box(modifier = Modifier.padding(end = 8.dp)) {
-                                InputChip(
-                                    selected = selectedTerminal != null,
-                                    onClick = { showTerminalMenu = true },
-                                    label = { Text(selectedTerminal?.name ?: "CAJA", fontWeight = FontWeight.Bold, maxLines = 1) },
-                                    leadingIcon = { Icon(Icons.Default.Store, null, modifier = Modifier.size(18.dp), tint = if (selectedTerminal == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) },
-                                    colors = InputChipDefaults.inputChipColors(containerColor = if (selectedTerminal == null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant),
-                                    border = if (selectedTerminal == null) BorderStroke(2.dp, MaterialTheme.colorScheme.error) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-                                )
-                                DropdownMenu(expanded = showTerminalMenu, onDismissRequest = { showTerminalMenu = false }) {
-                                    DropdownMenuItem(text = { Text("SIN CAJA SELECCIONADA") }, onClick = { viewModel.selectTerminal(null); showTerminalMenu = false })
-                                    terminals.forEach { terminal ->
-                                        DropdownMenuItem(text = { Text(terminal.name) }, onClick = { viewModel.selectTerminal(terminal); showTerminalMenu = false }, leadingIcon = { if (terminal.id == selectedTerminal?.id) Icon(Icons.Default.Check, null) })
-                                    }
-                                }
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { viewModel.onSearchQueryChange(it) },
-                            modifier = Modifier.weight(1f).focusRequester(focusRequester).onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown) {
-                                    if (event.isAltPressed && event.key == Key.V) { onNavigateToCheckout(); true }
-                                    else if (event.isAltPressed && event.key == Key.W) { viewModel.putSaleOnHold(); true }
-                                    else if (event.isAltPressed && event.key == Key.G) { viewModel.openHeldSalesDialog(); true }
-                                    else if (event.isAltPressed && event.key == Key.R) { viewModel.openWithdrawalDialog(); true }
-                                    else if (event.isAltPressed && event.key == Key.C) { viewModel.openCustomerDialog(); true }
-                                    else if (event.isAltPressed && event.key == Key.D) { viewModel.openReturnDialog(); true }
-                                    else if (event.isAltPressed && event.key == Key.P) { viewModel.openCommentDialog(); true }
-                                    else if (event.isAltPressed && event.key == Key.N) { viewModel.openCashDrawer(); true }
-                                    else if (event.isAltPressed && event.key == Key.I) { viewModel.reprintLastSale(); true }
-                                    else if (event.isAltPressed && event.key == Key.A) { viewModel.openDebtPaymentDialog(); true }
-                                    else if (event.isAltPressed && event.key == Key.E) { viewModel.openMultiserviceDialog(); true }
-                                    else if (event.isAltPressed && event.key == Key.F) { viewModel.openCommonProductDialog(); true }
-                                    else if (event.isAltPressed && event.key == Key.K) { viewModel.openPreCutDialog(); true }
-                                    else {
-                                        when (event.key) {
-                                            Key.Plus, Key.NumPadAdd -> {
-                                                val text = searchQuery.text
-                                                if (text.isNotEmpty() && text.all { it.isDigit() || it == '.' }) { viewModel.openCommonWithShortcut(text); true } else false
-                                            }
-                                            Key.DirectionDown -> { viewModel.moveFocus(1); true }
-                                            Key.DirectionUp -> { viewModel.moveFocus(-1); true }
-                                            Key.DirectionRight -> { viewModel.incrementSelectedCartItem(); true }
-                                            Key.DirectionLeft -> { viewModel.decrementSelectedCartItem(); true }
-                                            Key.Enter, Key.NumPadEnter -> { if (showSearchResults) viewModel.selectCurrentItem() else viewModel.onSearchSubmit(); true }
-                                            Key.Delete -> {
-                                                if (currentFocusArea == PosViewModel.FocusArea.CART) {
-                                                    if (selectedCartIndex in items.indices) { viewModel.removeSaleItem(items[selectedCartIndex]); true } else false
-                                                } else if (currentFocusArea == PosViewModel.FocusArea.SEARCH_BAR) { viewModel.clearSale(); true } else false
-                                            }
-                                            Key.Escape -> { 
-                                                if (showSearchResults) {
-                                                    viewModel.onSearchQueryClear()
-                                                } else if (items.isNotEmpty()) {
-                                                    onNavigateToCheckout()
-                                                } else {
-                                                    viewModel.onSearchQueryClear()
-                                                    viewModel.selectSearchQuery()
-                                                }
-                                                true 
-                                            }
-                                            else -> false
-                                        }
-                                    }
-                                } else false
-                            },
-                            placeholder = { Text("Escanea código o busca por nombre...") },
-                            leadingIcon = { Icon(Icons.Default.Search, null) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search, keyboardType = KeyboardType.Text, autoCorrect = false),
-                            keyboardActions = KeyboardActions(onSearch = { viewModel.onSearchSubmit() }, onDone = { viewModel.onSearchSubmit() })
-                        )
-                    }
-
-                    // Carrito
-                    val contentModifier = Modifier.weight(1f).padding(horizontal = 16.dp)
-                    if (isCompact) {
-                        Column(modifier = contentModifier) {
-                            Text("Carrito (${items.size} ítems)", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.outline)
-                            if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin productos", color = Color.Gray) }
-                            else LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                itemsIndexed(items) { index, item ->
-                                    val isSelected = index == selectedCartIndex && currentFocusArea == PosViewModel.FocusArea.CART
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().background(if (isSelected) Color(0xFF2196F3) else Color.Transparent).clickable { viewModel.setSelectedCartIndex(index); viewModel.setFocusArea(PosViewModel.FocusArea.CART) }.padding(vertical = 8.dp, horizontal = 4.dp), 
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Card(
+                                        modifier = Modifier.size(45.dp), 
+                                        shape = RoundedCornerShape(4.dp), 
+                                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                                        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
                                     ) {
-                                        Card(
-                                            modifier = Modifier.size(45.dp), 
-                                            shape = RoundedCornerShape(4.dp), 
-                                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                                            border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
-                                        ) {
-                                            if (!item.productImagePath.isNullOrBlank()) {
-                                                KamelImage(resource = { asyncPainterResource(data = item.productImagePath.toDirectImageUrl()) }, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                                            } else {
-                                                Box(Modifier.fillMaxSize(), Alignment.Center) {
-                                                    Icon(Icons.Default.Image, null, modifier = Modifier.size(20.dp), tint = Color.LightGray)
-                                                }
+                                        if (!item.productImagePath.isNullOrBlank()) {
+                                            KamelImage(resource = { asyncPainterResource(data = item.productImagePath.toDirectImageUrl()) }, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                                        } else {
+                                            Box(Modifier.fillMaxSize(), Alignment.Center) {
+                                                Icon(Icons.Default.Image, null, modifier = Modifier.size(20.dp), tint = Color.LightGray)
                                             }
                                         }
-                                        Spacer(Modifier.width(12.dp))
-                                        Column(Modifier.weight(1f)) {
-                                            Text(item.productName, style = MaterialTheme.typography.bodyLarge, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, color = if (isSelected) Color.White else Color.Unspecified)
-                                            Surface(color = Color.Transparent, onClick = { viewModel.openQuantityDialog(item) }) {
-                                                Text("${item.quantity.formatWeight()} x $${item.priceAtSale.formatPrice()}", style = MaterialTheme.typography.bodySmall, color = if (isSelected) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                        Text("$${item.subtotal.formatPrice()}", fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color.Unspecified)
-                                        IconButton(onClick = { viewModel.removeSaleItem(item) }) { Icon(Icons.Default.Delete, null, Modifier.size(20.dp), tint = if (isSelected) Color.White else MaterialTheme.colorScheme.error) }
                                     }
-                                    HorizontalDivider()
+                                    Spacer(Modifier.width(28.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(item.productName, style = MaterialTheme.typography.bodyLarge, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, color = if (isSelected) Color.White else Color.Unspecified)
+                                        Surface(color = Color.Transparent, onClick = { viewModel.openQuantityDialog(item) }) {
+                                            Text("${item.quantity.formatWeight()} x $${item.priceAtSale.formatPrice()}", style = MaterialTheme.typography.bodySmall, color = if (isSelected) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Text("$${item.subtotal.formatPrice()}", fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color.Unspecified)
+                                    IconButton(onClick = { viewModel.removeSaleItem(item) }) { Icon(Icons.Default.Delete, null, Modifier.size(20.dp), tint = if (isSelected) Color.White else MaterialTheme.colorScheme.error) }
                                 }
+                                HorizontalDivider()
                             }
                         }
-                    } else {
-                        Column(modifier = contentModifier) {
-                            Row(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("Cant.", modifier = Modifier.width(45.dp), fontWeight = FontWeight.Bold)
-                                Text("Producto", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                                Text("Precio", modifier = Modifier.width(80.dp), textAlign = TextAlign.End, fontWeight = FontWeight.Bold)
-                                Text("Subtotal", modifier = Modifier.width(90.dp), textAlign = TextAlign.End, fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.width(40.dp))
-                            }
-                            if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Esperando productos...", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.outline) }
-                            else LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                itemsIndexed(items) { index, item ->
-                                    val isSelected = index == selectedCartIndex && currentFocusArea == PosViewModel.FocusArea.CART
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().background(if (isSelected) Color(0xFF2196F3) else Color.Transparent).clickable { viewModel.setSelectedCartIndex(index); viewModel.setFocusArea(PosViewModel.FocusArea.CART) }.padding(vertical = 4.dp, horizontal = 4.dp), 
-                                        verticalAlignment = Alignment.CenterVertically
+                    }
+                } else {
+                    Column(modifier = contentModifier) {
+                        Row(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Cant.", modifier = Modifier.width(70.dp), fontWeight = FontWeight.Bold)
+                            Text("Producto", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text("Precio", modifier = Modifier.width(80.dp), textAlign = TextAlign.End, fontWeight = FontWeight.Bold)
+                            Text("Subtotal", modifier = Modifier.width(90.dp), textAlign = TextAlign.End, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(40.dp))
+                        }
+                        if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Esperando productos...", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.outline) }
+                        else LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            itemsIndexed(items) { index, item ->
+                                val isSelected = index == selectedCartIndex && currentFocusArea == PosViewModel.FocusArea.CART
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent).clickable { viewModel.setSelectedCartIndex(index); viewModel.setFocusArea(PosViewModel.FocusArea.CART) }.padding(vertical = 4.dp, horizontal = 4.dp), 
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(modifier = Modifier.width(70.dp), color = Color.Transparent, onClick = { viewModel.setSelectedCartIndex(index); viewModel.openQuantityDialog(item) }) {
+                                        Text(item.quantity.formatWeight(), textAlign = TextAlign.Center, color = if (isSelected) Color.White else MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, style = MaterialTheme.typography.bodyLarge)
+                                    }
+                                    
+                                    Card(
+                                        modifier = Modifier.size(40.dp), 
+                                        shape = RoundedCornerShape(4.dp), 
+                                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                                        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
                                     ) {
-                                        Surface(modifier = Modifier.width(45.dp), color = Color.Transparent, onClick = { viewModel.setSelectedCartIndex(index); viewModel.openQuantityDialog(item) }) {
-                                            Text(item.quantity.formatWeight(), textAlign = TextAlign.Center, color = if (isSelected) Color.White else MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, style = MaterialTheme.typography.bodyLarge)
-                                        }
-                                        
-                                        Card(
-                                            modifier = Modifier.size(40.dp), 
-                                            shape = RoundedCornerShape(4.dp), 
-                                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                                            border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
-                                        ) {
-                                            if (!item.productImagePath.isNullOrBlank()) {
-                                                KamelImage(resource = { asyncPainterResource(data = item.productImagePath.toDirectImageUrl()) }, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                                            } else {
-                                                Box(Modifier.fillMaxSize(), Alignment.Center) {
-                                                    Icon(Icons.Default.Image, null, modifier = Modifier.size(20.dp), tint = Color.LightGray)
-                                                }
+                                        if (!item.productImagePath.isNullOrBlank()) {
+                                            KamelImage(resource = { asyncPainterResource(data = item.productImagePath.toDirectImageUrl()) }, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                                        } else {
+                                            Box(Modifier.fillMaxSize(), Alignment.Center) {
+                                                Icon(Icons.Default.Image, null, modifier = Modifier.size(20.dp), tint = Color.LightGray)
                                             }
                                         }
-                                        Spacer(Modifier.width(10.dp))
-
-                                        Text(item.productName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = if (isSelected) Color.White else Color.Unspecified, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, maxLines = 2)
-                                        Text("$${item.priceAtSale.formatPrice()}", modifier = Modifier.width(80.dp), textAlign = TextAlign.End, color = if (isSelected) Color.White else Color.Unspecified)
-                                        Text("$${item.subtotal.formatPrice()}", modifier = Modifier.width(90.dp), textAlign = TextAlign.End, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color.Unspecified)
-                                        IconButton(onClick = { viewModel.removeSaleItem(item) }) { Icon(Icons.Default.Delete, null, Modifier.size(20.dp), tint = if (isSelected) Color.White else MaterialTheme.colorScheme.error) }
                                     }
-                                    HorizontalDivider()
+                                    
+                                    Spacer(Modifier.width(28.dp))
+
+                                    Text(item.productName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = if (isSelected) Color.White else Color.Unspecified, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, maxLines = 2)
+                                    Text("$${item.priceAtSale.formatPrice()}", modifier = Modifier.width(80.dp), textAlign = TextAlign.End, color = if (isSelected) Color.White else Color.Unspecified)
+                                    Text("$${item.subtotal.formatPrice()}", modifier = Modifier.width(90.dp), textAlign = TextAlign.End, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color.Unspecified)
+                                    IconButton(onClick = { viewModel.removeSaleItem(item) }) { Icon(Icons.Default.Delete, null, Modifier.size(20.dp), tint = if (isSelected) Color.White else MaterialTheme.colorScheme.error) }
                                 }
+                                HorizontalDivider()
                             }
                         }
                     }
+                }
 
-                    // Botón de Cobro
-                    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer, tonalElevation = 8.dp) {
-                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Button(
-                                onClick = { if (selectedTerminal == null) viewModel.setErrorMessage("Debes seleccionar una caja.") else onNavigateToCheckout() }, 
-                                modifier = Modifier.height(64.dp).fillMaxWidth(), 
-                                enabled = items.isNotEmpty() && !isProcessingSale, 
-                                shape = MaterialTheme.shapes.medium
-                            ) {
-                                Row(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Column(horizontalAlignment = Alignment.Start) {
-                                        Text("TOTAL A COBRAR", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f))
-                                        Text("$${total.formatPrice()} (${itemCount}pz)", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Color.White)
-                                    }
-                                    Spacer(Modifier.weight(1f))
-                                    Icon(Icons.Default.FlashOn, null, modifier = Modifier.size(32.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(if (isCompact) "COBRAR" else "COBRAR (ESC)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                // Botón de Cobro
+                Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer, tonalElevation = 8.dp) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(
+                            onClick = { if (selectedTerminal == null) viewModel.setErrorMessage("Debes seleccionar una caja.") else onNavigateToCheckout() }, 
+                            modifier = Modifier.height(64.dp).fillMaxWidth(), 
+                            enabled = items.isNotEmpty() && !isProcessingSale, 
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Row(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(horizontalAlignment = Alignment.Start) {
+                                    Text("TOTAL A COBRAR", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f))
+                                    Text("$${total.formatPrice()} (${itemCount}pz)", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Color.White)
                                 }
-                            }
-                        }
-                    }
-                }
-
-                // --- SIDEBAR DE OFERTAS (SOLO SI HAY PROMOS ACTIVAS) ---
-                if (isExtended && sidebarItems.isNotEmpty()) {
-                    Box(modifier = Modifier.width(400.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)).padding(12.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("¡OFERTAS!", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = Color(0xFFE91E63))
-                            Spacer(Modifier.height(16.dp))
-                            val currentItem = sidebarItems.getOrNull(sidebarIndex)
-                            if (currentItem is Promotion) {
-                                PromotionVisualCard(currentItem, viewModel)
-                            } else if (currentItem is String) {
-                                Card(modifier = Modifier.fillMaxSize(), elevation = CardDefaults.cardElevation(defaultElevation = 6.dp), shape = MaterialTheme.shapes.large) {
-                                    KamelImage(resource = { asyncPainterResource(data = currentItem.toDirectImageUrl()) }, contentDescription = "Publicidad", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, onLoading = { Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() } })
-                                }
+                                Spacer(Modifier.weight(1f))
+                                Icon(Icons.Default.FlashOn, null, modifier = Modifier.size(32.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(if (isCompact) "COBRAR" else "COBRAR (ESC)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
             }
 
-            // --- OVERLAY DE VENTA COMPLETADA ---
-            val saleChangeOverlay by viewModel.saleChange.collectAsState()
-            val showCardSuccess by viewModel.showCardSuccess.collectAsState()
-            
-            if (showSaleSuccess && (saleChangeOverlay != null || showCardSuccess)) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Card(
-                        modifier = Modifier.size(300.dp), 
-                        elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = BorderStroke(4.dp, Color(0xFF4CAF50)),
-                        shape = RoundedCornerShape(24.dp)
-                    ) {
-                        Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(64.dp))
-                            Spacer(Modifier.height(16.dp))
-                            Text("VENTA LISTA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.DarkGray)
-                            if (showCardSuccess) {
-                                Text("PAGO OK", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF4CAF50), fontWeight = FontWeight.Black)
-                            } else {
-                                Text("CAMBIO:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                Text("$${saleChangeOverlay?.formatPrice()}", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black, color = Color(0xFF4CAF50))
+            // --- SIDEBAR DE OFERTAS (SOLO SI HAY PROMOS ACTIVAS) ---
+            if (isExtended && sidebarItems.isNotEmpty()) {
+                Box(modifier = Modifier.width(400.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)).padding(12.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("¡OFERTAS!", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = Color(0xFFE91E63))
+                        Spacer(Modifier.height(16.dp))
+                        val currentItem = sidebarItems.getOrNull(sidebarIndex)
+                        if (currentItem is Promotion) {
+                            PromotionVisualCard(currentItem, viewModel)
+                        } else if (currentItem is String) {
+                            Card(modifier = Modifier.fillMaxSize(), elevation = CardDefaults.cardElevation(defaultElevation = 6.dp), shape = MaterialTheme.shapes.large) {
+                                KamelImage(resource = { asyncPainterResource(data = currentItem.toDirectImageUrl()) }, contentDescription = "Publicidad", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, onLoading = { Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() } })
                             }
                         }
                     }
                 }
             }
+        }
 
-            if (errorMessage != null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Card(
-                        modifier = Modifier.size(200.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error),
-                        shape = RoundedCornerShape(24.dp),
-                        elevation = CardDefaults.cardElevation(12.dp)
-                    ) {
-                        Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.Error, null, tint = Color.White, modifier = Modifier.size(50.dp))
-                            Spacer(Modifier.height(12.dp))
-                            Text(errorMessage!!, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            }
-
-            if (warningMessage != null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Card(
-                        modifier = Modifier.size(200.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50)),
-                        shape = RoundedCornerShape(24.dp),
-                        elevation = CardDefaults.cardElevation(12.dp)
-                    ) {
-                        Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color.White, modifier = Modifier.size(50.dp))
-                            Spacer(Modifier.height(12.dp))
-                            Text(warningMessage!!, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            }
-
-            // --- VENTANA DE BÚSQUEDA (DIALOG) ---
-            if (showSearchResults && searchResults.isNotEmpty()) {
-                val dialogFocusRequester = remember { FocusRequester() }
-                val listState = rememberLazyListState()
-                
-                LaunchedEffect(showSearchResults) {
-                    delay(100)
-                    dialogFocusRequester.requestFocus()
-                }
-
-                LaunchedEffect(selectedSearchIndex) {
-                    if (selectedSearchIndex >= 0) {
-                        listState.animateScrollToItem(selectedSearchIndex)
-                    }
-                }
-
-                Dialog(
-                    onDismissRequest = { viewModel.onSearchQueryClear() },
-                    properties = androidx.compose.ui.window.DialogProperties(
-                        usePlatformDefaultWidth = false,
-                        dismissOnBackPress = true,
-                        dismissOnClickOutside = true
-                    )
+        // --- OVERLAY DE VENTA COMPLETADA ---
+        val saleChangeOverlay by viewModel.saleChange.collectAsState()
+        val showCardSuccess by viewModel.showCardSuccess.collectAsState()
+        
+        if (showSaleSuccess && (saleChangeOverlay != null || showCardSuccess)) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Card(
+                    modifier = Modifier.size(300.dp), 
+                    elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(4.dp, Color(0xFF4CAF50)),
+                    shape = RoundedCornerShape(24.dp)
                 ) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth(0.95f)
-                            .fillMaxHeight(0.85f),
-                        elevation = CardDefaults.cardElevation(24.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
-                        colors = CardDefaults.cardColors(containerColor = Color.White)
-                    ) {
-                        Column {
-                            Surface(
-                                color = Color(0xFF0056A0),
-                                contentColor = Color.White,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Box(modifier = Modifier.padding(8.dp).fillMaxWidth()) {
-                                    IconButton(
-                                        onClick = { viewModel.onSearchQueryClear() },
-                                        modifier = Modifier.align(Alignment.CenterStart).size(32.dp)
-                                    ) {
-                                        Icon(Icons.Default.Close, null, tint = Color.White)
-                                    }
-                                    Text(
-                                        "Buscador",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.align(Alignment.Center)
-                                    )
+                    Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(64.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text("VENTA LISTA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.DarkGray)
+                        if (showCardSuccess) {
+                            Text("PAGO OK", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF4CAF50), fontWeight = FontWeight.Black)
+                        } else {
+                            Text("CAMBIO:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            Text("$${saleChangeOverlay?.formatPrice()}", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black, color = Color(0xFF4CAF50))
+                        }
+                    }
+                }
+            }
+        }
+
+        if (errorMessage != null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Card(
+                    modifier = Modifier.size(200.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(24.dp),
+                    elevation = CardDefaults.cardElevation(12.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(Icons.Default.Error, null, tint = Color.White, modifier = Modifier.size(50.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text(errorMessage!!, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+
+        if (warningMessage != null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Card(
+                    modifier = Modifier.size(200.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50)),
+                    shape = RoundedCornerShape(24.dp),
+                    elevation = CardDefaults.cardElevation(12.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(Icons.Default.CheckCircle, null, tint = Color.White, modifier = Modifier.size(50.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text(warningMessage!!, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+
+        // --- VENTANA DE BÚSQUEDA (DIALOG) ---
+        if (showSearchResults && searchResults.isNotEmpty()) {
+            val dialogFocusRequester = remember { FocusRequester() }
+            val listState = rememberLazyListState()
+            
+            LaunchedEffect(showSearchResults) {
+                delay(100)
+                dialogFocusRequester.requestFocus()
+            }
+
+            LaunchedEffect(selectedSearchIndex) {
+                if (selectedSearchIndex >= 0) {
+                    listState.animateScrollToItem(selectedSearchIndex)
+                }
+            }
+
+            Dialog(
+                onDismissRequest = { viewModel.onSearchQueryClear() },
+                properties = androidx.compose.ui.window.DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = true
+                )
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .fillMaxHeight(0.85f),
+                    elevation = CardDefaults.cardElevation(24.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Column {
+                        Surface(
+                            color = Color(0xFF0056A0),
+                            contentColor = Color.White,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(modifier = Modifier.padding(8.dp).fillMaxWidth()) {
+                                IconButton(
+                                    onClick = { viewModel.onSearchQueryClear() },
+                                    modifier = Modifier.align(Alignment.CenterStart).size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, null, tint = Color.White)
                                 }
+                                Text(
+                                    "Buscador",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.align(Alignment.Center)
+                                )
                             }
-                            
-                            Box(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
-                                OutlinedTextField(
-                                    value = searchQuery,
-                                    onValueChange = { viewModel.onSearchQueryChange(it) },
+                        }
+                        
+                        Box(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { viewModel.onSearchQueryChange(it) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(dialogFocusRequester)
+                                    .onPreviewKeyEvent { event ->
+                                        if (event.type == KeyEventType.KeyDown) {
+                                            when (event.key) {
+                                                Key.DirectionDown -> { viewModel.moveFocus(1); true }
+                                                Key.DirectionUp -> { viewModel.moveFocus(-1); true }
+                                                Key.Enter, Key.NumPadEnter -> { viewModel.selectCurrentItem(); true }
+                                                Key.Escape -> { viewModel.onSearchQueryClear(); true }
+                                                else -> false
+                                            }
+                                        } else false
+                                    },
+                                trailingIcon = { Icon(Icons.Default.Tune, null, tint = Color(0xFF0056A0)) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF0056A0),
+                                    cursorColor = Color(0xFF0056A0)
+                                )
+                            )
+                        }
+                        
+                        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            val isSmall = maxWidth < 600.dp
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Producto", style = MaterialTheme.typography.labelLarge, color = Color.Gray, modifier = Modifier.weight(1f))
+                                Text("Existencia", style = MaterialTheme.typography.labelLarge, color = Color.Gray, modifier = Modifier.width(if (isSmall) 70.dp else 120.dp), textAlign = TextAlign.End)
+                                Text("Precio", style = MaterialTheme.typography.labelLarge, color = Color.Gray, modifier = Modifier.width(if (isSmall) 80.dp else 120.dp), textAlign = TextAlign.End)
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            state = listState
+                        ) {
+                            itemsIndexed(searchResults) { index, product ->
+                                val isSelected = index == selectedSearchIndex
+                                Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .focusRequester(dialogFocusRequester)
-                                        .onPreviewKeyEvent { event ->
-                                            if (event.type == KeyEventType.KeyDown) {
-                                                when (event.key) {
-                                                    Key.DirectionDown -> { viewModel.moveFocus(1); true }
-                                                    Key.DirectionUp -> { viewModel.moveFocus(-1); true }
-                                                    Key.Enter, Key.NumPadEnter -> { viewModel.selectCurrentItem(); true }
-                                                    Key.Escape -> { viewModel.onSearchQueryClear(); true }
-                                                    else -> false
-                                                }
-                                            } else false
-                                        },
-                                    trailingIcon = { Icon(Icons.Default.Tune, null, tint = Color(0xFF0056A0)) },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = Color(0xFF0056A0),
-                                        cursorColor = Color(0xFF0056A0)
-                                    )
-                                )
-                            }
-                            
-                            BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                val isSmall = maxWidth < 600.dp
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Producto", style = MaterialTheme.typography.labelLarge, color = Color.Gray, modifier = Modifier.weight(1f))
-                                    Text("Existencia", style = MaterialTheme.typography.labelLarge, color = Color.Gray, modifier = Modifier.width(if (isSmall) 70.dp else 120.dp), textAlign = TextAlign.End)
-                                    Text("Precio", style = MaterialTheme.typography.labelLarge, color = Color.Gray, modifier = Modifier.width(if (isSmall) 80.dp else 120.dp), textAlign = TextAlign.End)
-                                }
-                            }
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                            
-                            LazyColumn(
-                                modifier = Modifier.weight(1f),
-                                state = listState
-                            ) {
-                                itemsIndexed(searchResults) { index, product ->
-                                    val isSelected = index == selectedSearchIndex
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { viewModel.onResultClick(product) },
-                                        color = if (isSelected) Color(0xFF2196F3) else Color.Transparent
-                                    ) {
-                                        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                            val isSmall = maxWidth < 600.dp
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Card(
-                                                    modifier = Modifier.size(if (isSmall) 50.dp else 80.dp),
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                                                ) {
-                                                    if (!product.imagePath.isNullOrBlank()) {
-                                                        KamelImage(
-                                                            resource = { asyncPainterResource(data = product.imagePath!!.toDirectImageUrl()) },
-                                                            contentDescription = null,
-                                                            modifier = Modifier.fillMaxSize(),
-                                                            contentScale = ContentScale.Fit
-                                                        )
-                                                    } else {
-                                                        Box(Modifier.fillMaxSize(), Alignment.Center) {
-                                                            Icon(Icons.Default.Image, null, tint = Color.LightGray)
-                                                        }
+                                        .clickable { viewModel.onResultClick(product) },
+                                    color = if (isSelected) Color(0xFF2196F3) else Color.Transparent
+                                ) {
+                                    BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                        val isSmall = maxWidth < 600.dp
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Card(
+                                                modifier = Modifier.size(if (isSmall) 50.dp else 80.dp),
+                                                shape = RoundedCornerShape(4.dp),
+                                                colors = CardDefaults.cardColors(containerColor = Color.White)
+                                            ) {
+                                                if (!product.imagePath.isNullOrBlank()) {
+                                                    KamelImage(
+                                                        resource = { asyncPainterResource(data = product.imagePath!!.toDirectImageUrl()) },
+                                                        contentDescription = null,
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentScale = ContentScale.Fit
+                                                    )
+                                                } else {
+                                                    Box(Modifier.fillMaxSize(), Alignment.Center) {
+                                                        Icon(Icons.Default.Image, null, tint = Color.LightGray)
                                                     }
                                                 }
-                                                
-                                                Spacer(Modifier.width(if (isSmall) 8.dp else 16.dp))
-                                                
-                                                Column(Modifier.weight(1f)) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Text(
-                                                            text = "PZA", 
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            fontWeight = FontWeight.Black,
-                                                            color = if (isSelected) Color.White else Color(0xFF0056A0)
-                                                        )
-                                                        Spacer(Modifier.width(8.dp))
-                                                        Text(
-                                                            text = product.barcode,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = if (isSelected) Color.White.copy(0.8f) else Color.Gray,
-                                                            maxLines = 1
-                                                        )
-                                                    }
+                                            }
+                                            
+                                            Spacer(Modifier.width(if (isSmall) 8.dp else 16.dp))
+                                            
+                                            Column(Modifier.weight(1f)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Text(
-                                                        product.name, 
-                                                        fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium, 
-                                                        style = if (isSmall) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
-                                                        color = if (isSelected) Color.White else Color.Black,
-                                                        maxLines = 2
+                                                        text = "PZA", 
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Black,
+                                                        color = if (isSelected) Color.White else Color(0xFF0056A0)
+                                                    )
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text(
+                                                        text = product.barcode,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = if (isSelected) Color.White.copy(0.8f) else Color.Gray,
+                                                        maxLines = 1
                                                     )
                                                 }
-                                                
                                                 Text(
-                                                    text = "${searchStocks[product.barcode]?.toInt() ?: 0}",
+                                                    product.name, 
+                                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium, 
                                                     style = if (isSmall) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier.width(if (isSmall) 70.dp else 120.dp),
-                                                    textAlign = TextAlign.End,
-                                                    color = if (isSelected) Color.White else Color.Black
-                                                )
-                                                
-                                                Text(
-                                                    text = "$${product.price3.formatPrice()}",
-                                                    style = if (isSmall) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
-                                                    fontWeight = FontWeight.Black,
-                                                    modifier = Modifier.width(if (isSmall) 80.dp else 120.dp),
-                                                    textAlign = TextAlign.End,
-                                                    color = if (isSelected) Color.White else Color.Black
+                                                    color = if (isSelected) Color.White else Color.Black,
+                                                    maxLines = 2
                                                 )
                                             }
+                                            
+                                            Text(
+                                                text = "${searchStocks[product.barcode]?.toInt() ?: 0}",
+                                                style = if (isSmall) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.width(if (isSmall) 70.dp else 120.dp),
+                                                textAlign = TextAlign.End,
+                                                color = if (isSelected) Color.White else Color.Black
+                                            )
+                                            
+                                            Text(
+                                                text = "$${product.price3.formatPrice()}",
+                                                style = if (isSmall) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Black,
+                                                modifier = Modifier.width(if (isSmall) 80.dp else 120.dp),
+                                                textAlign = TextAlign.End,
+                                                color = if (isSelected) Color.White else Color.Black
+                                            )
                                         }
                                     }
-                                    if (!isSelected) HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f), modifier = Modifier.padding(horizontal = 16.dp))
                                 }
+                                if (!isSelected) HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f), modifier = Modifier.padding(horizontal = 16.dp))
                             }
                         }
                     }

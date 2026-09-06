@@ -18,19 +18,27 @@ class SyncManager(
     private val promotionRepository: PromotionRepository,
     private val deletionLogRepository: DeletionLogRepository,
     private val settingsRepository: SettingsRepository,
+    private val firebaseManager: com.abtsplazita.posplazita.data.remote.FirebaseManager,
     private val scope: CoroutineScope
 ) {
     private var syncJob: Job? = null
     private var periodic1hJob: Job? = null
     private var periodic3hJob: Job? = null
+    private var approvalsJob: Job? = null
     
     private var currentBranchId: String? = null
+    private var currentUsername: String? = null
+
+    fun setUserInfo(username: String?) {
+        currentUsername = username
+    }
 
     fun setBranchId(id: String?) {
         if (currentBranchId != id && id != null) {
             currentBranchId = id
             // Reiniciar observación de inventario para la nueva sucursal
             productRepository.startIncrementalSync(id)
+            startApprovalsObservation(id)
             
             scope.launch {
                 val syncKey = "is_inv_sync_done_$id"
@@ -46,6 +54,26 @@ class SyncManager(
             }
         } else {
             currentBranchId = id
+        }
+    }
+
+    private fun startApprovalsObservation(branchId: String) {
+        approvalsJob?.cancel()
+        approvalsJob = scope.launch {
+            firebaseManager.observeDeletionRequests(branchId) { requests ->
+                // Procesar aprobaciones de forma global para que el solicitante lo reciba 
+                // sin importar en qué pantalla esté.
+                val approved = requests.filter { it.status == "APPROVED" }
+                approved.forEach { req ->
+                    if (req.userId == currentUsername) {
+                        scope.launch {
+                            println("SYNC_MANAGER: Procesando aprobación de borrado para ticket ${req.ticketId}")
+                            saleRepository.deleteHeldSale(req.ticketId)
+                            firebaseManager.deleteDeletionRequest(req.id)
+                        }
+                    }
+                }
+            }
         }
     }
 

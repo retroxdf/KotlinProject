@@ -35,7 +35,7 @@ fun LoginScreen(viewModel: AuthViewModel, logoUrl: String) {
     val mustChangeNip by viewModel.mustChangeNip.collectAsState()
     val error by viewModel.error.collectAsState()
     
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.TopCenter) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally, 
             modifier = Modifier.padding(top = 48.dp, start = 32.dp, end = 32.dp, bottom = 32.dp)
@@ -70,7 +70,7 @@ fun LoginScreen(viewModel: AuthViewModel, logoUrl: String) {
             Text("Selecciona tu usuario para ingresar", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
             
             Spacer(modifier = Modifier.height(4.dp))
-            Text("Versión 1.0.8", style = MaterialTheme.typography.labelSmall, color = Color.Gray.copy(alpha = 0.6f))
+            Text("Versión 1.0.9", style = MaterialTheme.typography.labelSmall, color = Color.Gray.copy(alpha = 0.6f))
             
             Spacer(modifier = Modifier.height(44.dp))
 
