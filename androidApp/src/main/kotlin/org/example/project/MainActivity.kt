@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
+import com.google.firebase.FirebaseApp
 import com.abtsplazita.posplazita.data.local.databaseContext
 import com.abtsplazita.posplazita.data.local.currentActivity
 
@@ -37,6 +38,12 @@ class MainActivity : ComponentActivity() {
         // Inicializar contexto para Room
         databaseContext = applicationContext
         currentActivity = this
+        
+        try {
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                FirebaseApp.initializeApp(this)
+            }
+        } catch (e: Exception) {}
 
         setContent {
             App()

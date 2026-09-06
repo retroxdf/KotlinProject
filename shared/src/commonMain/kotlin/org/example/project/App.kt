@@ -2,8 +2,6 @@ package com.abtsplazita.posplazita
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,37 +45,30 @@ import com.abtsplazita.posplazita.ui.contabilidad.*
 import com.abtsplazita.posplazita.data.remote.FirebaseManager
 import com.abtsplazita.posplazita.data.remote.MercadoPagoManager
 import com.abtsplazita.posplazita.data.SyncManager
-import com.abtsplazita.posplazita.domain.formatPrice
-import com.abtsplazita.posplazita.formatTimestamp
 import androidx.compose.ui.tooling.preview.Preview
-import io.kamel.core.config.KamelConfig
-import io.kamel.core.config.Core
-import io.kamel.core.config.takeFrom
-import io.kamel.image.config.*
 
 @Composable
 @Preview
 fun App() {
-    val kamelConfig = remember {
-        KamelConfig {
-            takeFrom(KamelConfig.Core)
-            imageBitmapDecoder()
-            imageVectorDecoder()
-            svgDecoder()
-        }
-    }
-    
-    CompositionLocalProvider(LocalKamelConfig provides kamelConfig) {
-        AppContent()
-    }
+    AppContent()
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppContent() {
-    val database = remember { createDatabase() }
+    val database = remember { 
+        try { createDatabase() } catch (e: Exception) { null }
+    }
     
+    if (database == null) {
+        Box(Modifier.fillMaxSize(), Alignment.Center) {
+            Text("Error crítico: No se pudo inicializar la base de datos.", color = Color.Red)
+        }
+        return
+    }
+
     LaunchedEffect(Unit) {
-        initializeFirebase()
+        try { initializeFirebase() } catch (e: Exception) {}
     }
 
     val firebaseManager = remember { FirebaseManager() }
@@ -86,24 +77,24 @@ fun AppContent() {
     val productRepository = remember { ProductRepository(database.productDao(), database.inventoryDao(), database.stockMovementDao(), database.categoryDao(), database.taxDao(), firebaseManager, globalScope) }
     val saleRepository = remember { SaleRepository(database.saleDao(), database.heldSaleDao(), firebaseManager) }
     val userRepository = remember { UserRepository(database.userDao(), database.rolePermissionDao(), firebaseManager, globalScope) }
-    val purchaseRepository = remember { PurchaseRepository(database.purchaseDao(), productRepository, firebaseManager) }
-    val purchaseUnitRepository = remember { PurchaseUnitRepository(database.purchaseUnitDao()) }
     val branchRepository = remember { BranchRepository(database.branchDao(), firebaseManager, globalScope) }
-    val posTerminalRepository = remember { PosTerminalRepository(database.posTerminalDao(), firebaseManager) }
-    val movementRepository = remember { StockMovementRepository(database.stockMovementDao(), firebaseManager) }
+    val employeeRepository = remember { EmployeeRepository(database.employeeDao(), database.scheduleDao(), database.loanDao(), database.absenceReplacementDao(), database.cashBoxDao(), database.contaplaTransactionDao(), database.corteContaplaDao(), database.paymentRecordDao(), database.attendanceDao(), firebaseManager) }
+    val settingsRepository = remember { SettingsRepository(database.appSettingsDao()) }
+    
+    val purchaseRepository = remember { PurchaseRepository(database.purchaseDao(), productRepository, firebaseManager) }
     val cashMovementRepository = remember { CashMovementRepository(database.cashMovementDao(), firebaseManager) }
     val cashOutRepository = remember { CashOutRepository(database.cashOutDao(), firebaseManager) }
     val preCutRepository = remember { PreCutRepository(database.preCutDao(), firebaseManager) }
     val expenseRepository = remember { ExpenseRepository(database.expenseDao()) }
     val promotionRepository = remember { PromotionRepository(database.promotionDao(), firebaseManager) }
+    val posTerminalRepository = remember { PosTerminalRepository(database.posTerminalDao(), firebaseManager) }
     val permissionRepository = remember { PermissionRepository(database.rolePermissionDao()) }
     val supplierRepository = remember { SupplierRepository(database.supplierDao(), database.supplierPaymentDao(), database.productSupplierDao(), firebaseManager) }
     val customerRepository = remember { CustomerRepository(database.customerDao(), database.customerPaymentDao(), database.customerProductPriceDao(), firebaseManager, globalScope) }
-    val employeeRepository = remember { EmployeeRepository(database.employeeDao(), database.scheduleDao(), database.loanDao(), database.absenceReplacementDao(), database.cashBoxDao(), database.contaplaTransactionDao(), database.corteContaplaDao(), database.paymentRecordDao(), database.attendanceDao(), firebaseManager) }
-    val settingsRepository = remember { SettingsRepository(database.appSettingsDao()) }
     val deletionLogRepository = remember { DeletionLogRepository(database.deletionLogDao(), firebaseManager) }
     val productReturnRepository = remember { ProductReturnRepository(database.productReturnDao(), firebaseManager) }
-    
+    val movementRepository = remember { StockMovementRepository(database.stockMovementDao(), firebaseManager) }
+
     val mercadoPagoManager = remember { MercadoPagoManager() }
     val printerManager = remember { getRealPrinterManager() }
     val scaleManager = remember { getScaleManager() }
@@ -137,30 +128,23 @@ fun AppContent() {
     
     val authViewModel = remember { AuthViewModel(userRepository, employeeRepository, permissionRepository, settingsRepository) }
     val branchViewModel = remember { BranchViewModel(branchRepository) }
-    val peripheralViewModel = remember { PeripheralViewModel(settingsRepository, printerManager, posTerminalRepository, firebaseManager, mercadoPagoManager, productRepository, scaleManager, "") }
 
     LaunchedEffect(database) {
-        if (settingsRepository.getSetting("db_initial_clear_v5") != "true") {
+        if (settingsRepository.getSetting("db_initial_clear_v13") != "true") {
             try {
-                println("APP: Realizando limpieza de mantenimiento y re-sincronización...")
                 database.clearAllTablesManual()
                 userRepository.initializeAdmin()
-                
-                // Resetear banderas de sincronización para forzar descarga total
                 settingsRepository.saveSetting("is_initial_sync_completed", "false")
-                // Borrar banderas de inventario por sucursal (simplificado reset de settings)
-                
-                settingsRepository.saveSetting("db_initial_clear_v5", "true")
+                settingsRepository.saveSetting("db_initial_clear_v13", "true")
             } catch (e: Exception) {}
         }
     }
 
     var selectedBranch by remember { mutableStateOf<Branch?>(null) }
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
-    val appLogoUrl by peripheralViewModel.appLogoUrl.collectAsState()
-
+    
     if (!isLoggedIn) {
-        LoginScreen(authViewModel, appLogoUrl)
+        LoginScreen(authViewModel, "")
         return
     }
 
@@ -170,18 +154,83 @@ fun AppContent() {
         return
     }
 
-    val branchId = currentBranch.id
-    LaunchedEffect(branchId) {
-        if (branchId.isNotBlank()) {
-            currentSaleManager.setBranchId(branchId)
-            syncManager.setBranchId(branchId)
-            try { posTerminalRepository.refreshTerminals(branchId) } catch (e: Exception) {}
-        }
-    }
+    BranchMainLayout(
+        branch = currentBranch,
+        productRepository = productRepository,
+        saleRepository = saleRepository,
+        userRepository = userRepository,
+        branchRepository = branchRepository,
+        employeeRepository = employeeRepository,
+        settingsRepository = settingsRepository,
+        purchaseRepository = purchaseRepository,
+        cashMovementRepository = cashMovementRepository,
+        cashOutRepository = cashOutRepository,
+        preCutRepository = preCutRepository,
+        expenseRepository = expenseRepository,
+        promotionRepository = promotionRepository,
+        posTerminalRepository = posTerminalRepository,
+        permissionRepository = permissionRepository,
+        supplierRepository = supplierRepository,
+        customerRepository = customerRepository,
+        deletionLogRepository = deletionLogRepository,
+        productReturnRepository = productReturnRepository,
+        movementRepository = movementRepository,
+        firebaseManager = firebaseManager,
+        mercadoPagoManager = mercadoPagoManager,
+        printerManager = printerManager,
+        scaleManager = scaleManager,
+        currentSaleManager = currentSaleManager,
+        checkoutManager = checkoutManager,
+        cashManager = cashManager,
+        customerInteractor = customerInteractor,
+        syncManager = syncManager,
+        authViewModel = authViewModel,
+        updateViewModel = updateViewModel,
+        onLogout = { selectedBranch = null; authViewModel.logout() }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BranchMainLayout(
+    branch: Branch,
+    productRepository: ProductRepository,
+    saleRepository: SaleRepository,
+    userRepository: UserRepository,
+    branchRepository: BranchRepository,
+    employeeRepository: EmployeeRepository,
+    settingsRepository: SettingsRepository,
+    purchaseRepository: PurchaseRepository,
+    cashMovementRepository: CashMovementRepository,
+    cashOutRepository: CashOutRepository,
+    preCutRepository: PreCutRepository,
+    expenseRepository: ExpenseRepository,
+    promotionRepository: PromotionRepository,
+    posTerminalRepository: PosTerminalRepository,
+    permissionRepository: PermissionRepository,
+    supplierRepository: SupplierRepository,
+    customerRepository: CustomerRepository,
+    deletionLogRepository: DeletionLogRepository,
+    productReturnRepository: ProductReturnRepository,
+    movementRepository: StockMovementRepository,
+    firebaseManager: FirebaseManager,
+    mercadoPagoManager: MercadoPagoManager,
+    printerManager: PrinterManager,
+    scaleManager: ScaleManager,
+    currentSaleManager: CurrentSaleManager,
+    checkoutManager: CheckoutManager,
+    cashManager: CashManager,
+    customerInteractor: CustomerInteractor,
+    syncManager: SyncManager,
+    authViewModel: AuthViewModel,
+    updateViewModel: UpdateViewModel,
+    onLogout: () -> Unit
+) {
+    val branchId = branch.id
     
     val posViewModel = remember(branchId) { PosViewModel(productRepository, saleRepository, customerRepository, posTerminalRepository, userRepository, settingsRepository, cashMovementRepository, cashOutRepository, preCutRepository, employeeRepository, mercadoPagoManager, currentSaleManager, branchId, promotionRepository, deletionLogRepository, productReturnRepository, printerManager, firebaseManager, scaleManager, checkoutManager, cashManager, customerInteractor) }
     val prodVM = remember(branchId) { ProductViewModel(productRepository, branchRepository, movementRepository, userRepository, branchId) }
-    val purchaseViewModel = remember(branchId) { PurchaseViewModel(productRepository, purchaseRepository, supplierRepository, cashMovementRepository, purchaseUnitRepository, branchId) }
+    val purchaseViewModel = remember(branchId) { PurchaseViewModel(productRepository, purchaseRepository, supplierRepository, cashMovementRepository, null, branchId) }
     val historyViewModel = remember(branchId) { 
         HistoryViewModel(
             saleRepository, purchaseRepository, productRepository, customerRepository, 
@@ -201,64 +250,37 @@ fun AppContent() {
     val dashboardViewModel = remember(branchId) { DashboardViewModel(saleRepository, expenseRepository, productRepository, posTerminalRepository, branchId) }
     val branchPeripheralViewModel = remember(branchId) { PeripheralViewModel(settingsRepository, printerManager, posTerminalRepository, firebaseManager, mercadoPagoManager, productRepository, scaleManager, branchId) }
 
-    val selectedTerminalPos by posViewModel.selectedTerminal.collectAsState()
-    val defaultPriceLevel by branchPeripheralViewModel.defaultPriceLevel.collectAsState()
-    val allowNegativeStock by branchPeripheralViewModel.allowNegativeStock.collectAsState()
-    val addAtTop by branchPeripheralViewModel.addAtTop.collectAsState()
-    
-    LaunchedEffect(selectedTerminalPos) {
-        historyViewModel.filterByTerminal(selectedTerminalPos?.id)
-        customerViewModel.setTerminalId(selectedTerminalPos?.id)
+    LaunchedEffect(branchId) {
+        currentSaleManager.setBranchId(branchId)
+        syncManager.setBranchId(branchId)
+        try { posTerminalRepository.refreshTerminals(branchId) } catch (e: Exception) {}
     }
-    
-    LaunchedEffect(defaultPriceLevel) {
-        posViewModel.setDefaultPriceLevel(defaultPriceLevel)
-        prodVM.setDefaultPriceLevel(defaultPriceLevel)
-    }
-
-    LaunchedEffect(allowNegativeStock) { posViewModel.setAllowNegativeStock(allowNegativeStock) }
-    LaunchedEffect(addAtTop) { posViewModel.setAddAtTop(addAtTop) }
 
     val userPermissions by authViewModel.userPermissions.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
-
-    LaunchedEffect(userPermissions, currentUser) {
-        posViewModel.setUserInfo(currentUser, userPermissions)
-        historyViewModel.setCurrentUser(currentUser)
-        contabilidadViewModel.setUserInfo(currentUser)
-        expenseViewModel.setUserInfo(currentUser)
-        customerViewModel.setUserInfo(currentUser)
-        inventoryViewModel.setUserInfo(currentUser)
-        prodVM.setUserInfo(currentUser, userPermissions)
-        purchaseViewModel.setUserInfo(currentUser)
-        supplierViewModel.setUserInfo(currentUser)
-    }
+    val allSettings by settingsRepository.getAllSettings().collectAsState(emptyMap())
 
     var currentScreen by remember { mutableStateOf("pos") }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val mainFocusRequester = remember { FocusRequester() }
-    
+
     val navigationItems = listOf(
         NavigationItem("pos", "Venta", Icons.Default.ShoppingCart, "F1", Permission.MAKE_SALE),
         NavigationItem("customers", "Clientes", Icons.Default.People, "F2", Permission.CUSTOMER_VIEW),
         NavigationItem("products", "Productos", Icons.AutoMirrored.Filled.List, "F3", Permission.PRODUCT_VIEW),
         NavigationItem("purchases", "Compras", Icons.Default.AddShoppingCart, "F4", Permission.MANAGE_PURCHASES),
-        NavigationItem("advanced_purchases", "Compras Avanzado", Icons.Default.LibraryAdd, permission = Permission.MANAGE_PURCHASES),
         NavigationItem("inventory", "Inventario", Icons.Default.Star, "F5", Permission.PRODUCT_VIEW),
         NavigationItem("history", "Consultas", Icons.Default.Assessment, "F8", Permission.VIEW_REPORTS),
-        NavigationItem("contabilidad", "Contapla (Contab.)", Icons.Default.Payments, "F9", permission = Permission.VIEW_ACCOUNTING),
+        NavigationItem("contabilidad", "Contabilidad", Icons.Default.Payments, "F9", permission = Permission.VIEW_ACCOUNTING),
         NavigationItem("settings", "Ajustes", Icons.Default.Settings, "F10", Permission.MANAGE_SETTINGS),
-        NavigationItem("cash_out", "Corte de Caja", Icons.Default.Info, "F11", Permission.PERFORM_CASH_OUT),
-        NavigationItem("dashboard", "Panel Control", Icons.Default.Dashboard, "F12", Permission.VIEW_REPORTS),
-        NavigationItem("web_orders", "Pedidos Web", Icons.Default.Language, permission = Permission.MAKE_SALE),
-        NavigationItem("restock", "Resurtimiento", Icons.Default.AutoFixHigh, permission = Permission.PRODUCT_VIEW),
-        NavigationItem("expenses", "Gastos", Icons.Default.MoneyOff, permission = Permission.MANAGE_CASH_MOVEMENTS),
-        NavigationItem("suppliers", "Proveedores", Icons.Default.LocalShipping, permission = Permission.SUPPLIER_VIEW),
-        NavigationItem("users", "Usuarios", Icons.Default.AccountBox, permission = Permission.MANAGE_USERS),
-        NavigationItem("change_branch", "Cambiar Sucursal", Icons.Default.SyncAlt, permission = Permission.MANAGE_SETTINGS),
+        NavigationItem("cash_out", "Corte Caja", Icons.Default.Info, "F11", Permission.PERFORM_CASH_OUT),
+        NavigationItem("dashboard", "Dashboard", Icons.Default.Dashboard, "F12", Permission.VIEW_REPORTS),
+        NavigationItem("change_branch", "Sucursal", Icons.Default.SyncAlt, permission = Permission.MANAGE_SETTINGS),
     ).filter { item ->
         if (item.id == "change_branch") {
+            val isLocked = allSettings["app_lock_branch_change"] == "true"
+            if (isLocked && currentUser?.role != Role.SUPER_ADMIN) return@filter false
             return@filter currentUser?.role == Role.SUPER_ADMIN || currentUser?.role == Role.GERENTE
         }
         val p = item.permission
@@ -266,256 +288,167 @@ fun AppContent() {
         else (userPermissions[p] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED
     }
 
-    val customColorScheme = lightColorScheme(
-        primary = Color(0xFF0056A0),
-        onPrimary = Color.White,
-        surface = Color.White,
-        onSurface = Color.Black,
-        background = Color.White,
-        onBackground = Color.Black,
-        surfaceVariant = Color(0xFFF5F7FA),
-        onSurfaceVariant = Color.DarkGray,
-        primaryContainer = Color(0xFF0056A0).copy(alpha = 0.1f),
-        onPrimaryContainer = Color(0xFF0056A0)
-    )
-
-    MaterialTheme(colorScheme = customColorScheme) {
-        BoxWithConstraints {
-            ModalNavigationDrawer(
-                drawerState = drawerState,
-                drawerContent = {
-                    ModalDrawerSheet {
-                        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                            Spacer(Modifier.height(12.dp))
-                            if (currentUser != null) {
-                                val showUserPanel by authViewModel.showUserPanel.collectAsState()
-                                Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).clickable { authViewModel.openUserPanel() }) {
-                                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
-                                        Spacer(Modifier.width(16.dp))
-                                        Column {
-                                            Text(currentUser!!.username.uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                            Text(currentUser!!.role.name, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                        }
-                                    }
-                                }
-                                if (showUserPanel) { UserPanelFullScreen(authViewModel, onDismiss = { authViewModel.closeUserPanel() }) }
-                            }
-                            Text("MENÚ PRINCIPAL", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.labelMedium)
-                            navigationItems.forEach { item ->
-                                NavigationDrawerItem(
-                                    icon = { Icon(item.icon, null) },
-                                    label = { Text(item.label) },
-                                    selected = currentScreen == item.id,
-                                    onClick = {
-                                        if (item.id == "change_branch") { selectedBranch = null; scope.launch { drawerState.close() }; return@NavigationDrawerItem }
-                                        if (item.id == "products") prodVM.resetToCatalog()
-                                        if (item.id == "customers") customerViewModel.selectCustomer(null)
-                                        currentScreen = item.id
-                                        scope.launch { drawerState.close() }
-                                    },
-                                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                                )
-                            }
-                            NavigationDrawerItem(icon = { Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color.Red) }, label = { Text("CERRAR SESIÓN", color = Color.Red, fontWeight = FontWeight.Bold) }, selected = false, onClick = { scope.launch { drawerState.close() }; authViewModel.logout() }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                            Spacer(Modifier.height(24.dp))
-                        }
-                    }
-                }
-            ) {
-                Scaffold(
-                    topBar = {
-                        CenterAlignedTopAppBar(
-                            title = { val currentLabel = navigationItems.find { it.id == currentScreen }?.label ?: ""; Text(currentLabel, fontWeight = FontWeight.Black) },
-                            navigationIcon = { IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, "Menú") } },
-                            actions = {
-                                if (currentScreen == "pos") {
-                                    IconButton(onClick = { posViewModel.openCustomerDialog() }) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(Icons.Default.People, "Cliente", tint = Color(0xFF673AB7), modifier = Modifier.size(20.dp))
-                                            Text("Alt+C", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp)
-                                        }
-                                    }
-                                    IconButton(onClick = { posViewModel.putSaleOnHold() }) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(Icons.Default.Pause, "Espera", tint = Color(0xFFFFA500), modifier = Modifier.size(20.dp))
-                                            Text("Alt+W", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp)
-                                        }
-                                    }
-                                    IconButton(onClick = { posViewModel.openHeldSalesDialog() }) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(Icons.Default.Save, "Guardados", tint = Color(0xFF2196F3), modifier = Modifier.size(20.dp))
-                                            Text("Alt+G", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp)
-                                        }
-                                    }
-                                    IconButton(onClick = { posViewModel.openWithdrawalDialog() }) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(Icons.Default.Atm, "Retiro", tint = Color(0xFF2196F3), modifier = Modifier.size(20.dp))
-                                            Text("Alt+R", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp)
-                                        }
-                                    }
-                                    IconButton(onClick = { posViewModel.openReturnDialog() }) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(Icons.Default.SyncAlt, "Devolución", tint = Color(0xFFE91E63), modifier = Modifier.size(20.dp))
-                                            Text("Alt+D", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp)
-                                        }
-                                    }
-                                    IconButton(onClick = { posViewModel.openDebtPaymentDialog() }) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(Icons.Default.Payments, "Abono", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
-                                            Text("Alt+A", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp)
-                                        }
-                                    }
-                                    IconButton(onClick = { posViewModel.reprintLastSale() }) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(Icons.Default.Print, "Reimprimir", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
-                                            Text("Alt+I", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp)
-                                        }
-                                    }
-                                    
-                                    VerticalDivider(modifier = Modifier.height(24.dp).padding(horizontal = 4.dp))
-                                    
-                                    IconButton(onClick = { posViewModel.openCashMovementDialog(CashMovementType.IN) }) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(Icons.Default.AddCircle, "Entrada", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
-                                            Text("F6", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp)
-                                        }
-                                    }
-                                    IconButton(onClick = { posViewModel.openCashMovementDialog(CashMovementType.OUT) }) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(Icons.Default.RemoveCircle, "Salida", tint = Color.Red, modifier = Modifier.size(20.dp))
-                                            Text("F7", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp)
-                                        }
-                                    }
-                                }
-                                IconButton(onClick = { posViewModel.refreshCatalog() }) { Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.primary) }
-                                var showPosMenu by remember { mutableStateOf(false) }
-                                    Box {
-                                        IconButton(onClick = { showPosMenu = true }) { Icon(Icons.Default.MoreVert, "Opciones") }
-                                        DropdownMenu(expanded = showPosMenu, onDismissRequest = { showPosMenu = false }) {
-                                            DropdownMenuItem(text = { Text("Traer Cliente (Alt + C)") }, leadingIcon = { Icon(Icons.Default.People, null, tint = Color(0xFF673AB7)) }, onClick = { showPosMenu = false; posViewModel.openCustomerDialog() })
-                                            DropdownMenuItem(text = { Text("Poner en Espera (Alt + W)") }, leadingIcon = { Icon(Icons.Default.Pause, null, tint = Color(0xFFFFA500)) }, onClick = { showPosMenu = false; posViewModel.putSaleOnHold() })
-                                            DropdownMenuItem(text = { Text("Tickets Guardados (Alt + G)") }, leadingIcon = { Icon(Icons.Default.Save, null, tint = Color(0xFF2196F3)) }, onClick = { showPosMenu = false; posViewModel.openHeldSalesDialog() })
-                                            DropdownMenuItem(text = { Text("Retiro Efectivo (Alt + R)") }, leadingIcon = { Icon(Icons.Default.Atm, null, tint = Color(0xFF2196F3)) }, onClick = { showPosMenu = false; posViewModel.openWithdrawalDialog() })
-                                            DropdownMenuItem(text = { Text("Devolución / Cambio (Alt + D)") }, leadingIcon = { Icon(Icons.Default.SyncAlt, null, tint = Color(0xFFE91E63)) }, onClick = { showPosMenu = false; posViewModel.openReturnDialog() })
-                                            DropdownMenuItem(text = { Text("Abonos / Deuda (Alt + A)") }, leadingIcon = { Icon(Icons.Default.Payments, null, tint = Color(0xFF4CAF50)) }, onClick = { showPosMenu = false; posViewModel.openDebtPaymentDialog() })
-                                            DropdownMenuItem(text = { Text("Reimprimir Última (Alt + I)") }, leadingIcon = { Icon(Icons.Default.Print, null, tint = Color(0xFF4CAF50)) }, onClick = { showPosMenu = false; posViewModel.reprintLastSale() })
-                                            HorizontalDivider()
-                                            DropdownMenuItem(text = { Text("Entrada de Dinero (F6)") }, leadingIcon = { Icon(Icons.Default.AddCircle, null, tint = Color(0xFF4CAF50)) }, onClick = { showPosMenu = false; posViewModel.openCashMovementDialog(CashMovementType.IN) })
-                                            DropdownMenuItem(text = { Text("Salida de Dinero (F7)") }, leadingIcon = { Icon(Icons.Default.RemoveCircle, null, tint = Color.Red) }, onClick = { showPosMenu = false; posViewModel.openCashMovementDialog(CashMovementType.OUT) })
-                                            HorizontalDivider()
-                                            DropdownMenuItem(text = { Text("Comentarios Ticket (Alt + P)") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.Notes, null, tint = Color(0xFF2196F3)) }, onClick = { showPosMenu = false; posViewModel.openCommentDialog() })
-                                            DropdownMenuItem(text = { Text("Realizar Precorte (Alt + K)") }, leadingIcon = { Icon(Icons.Default.Analytics, null, tint = Color(0xFF2196F3)) }, onClick = { showPosMenu = false; posViewModel.openPreCutDialog() })
-                                            HorizontalDivider()
-                                            DropdownMenuItem(text = { Text("Abrir Cajón (Alt + N)") }, leadingIcon = { Icon(Icons.Default.LockOpen, null, tint = Color.Gray) }, onClick = { showPosMenu = false; posViewModel.openCashDrawer() })
-                                            DropdownMenuItem(text = { Text("Limpiar Venta (F5)") }, leadingIcon = { Icon(Icons.Default.DeleteSweep, null, tint = Color.Red) }, onClick = { showPosMenu = false; posViewModel.clearSale() })
-                                        }
-                                    }
-                            }
-                        )
-                    }
-                ) { padding ->
-                    Surface(
-                        modifier = Modifier.padding(padding)
-                            .focusRequester(mainFocusRequester)
-                            .focusable()
-                            .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown) {
-                                    // PRIORIDAD MÁXIMA AL ESCAPE
-                                    if (event.key == Key.Escape) {
-                                        if (currentScreen == "pos") {
-                                            posViewModel.handleGlobalEscape { currentScreen = "checkout" }
-                                            return@onPreviewKeyEvent true
-                                        }
-                                    }
-                                    val isDialogSubScreen = currentScreen == "checkout" || currentScreen == "purchases"
-                                    
-                                    // ATAJOS CON ALT PARA VENTAS
-                                    if (currentScreen == "pos" && event.isAltPressed) {
-                                        when (event.key) {
-                                            Key.C -> { posViewModel.openCustomerDialog(); return@onPreviewKeyEvent true }
-                                            Key.W -> { posViewModel.putSaleOnHold(); return@onPreviewKeyEvent true }
-                                            Key.R -> { posViewModel.openWithdrawalDialog(); return@onPreviewKeyEvent true }
-                                            Key.G -> { posViewModel.openHeldSalesDialog(); return@onPreviewKeyEvent true }
-                                            Key.D -> { posViewModel.openReturnDialog(); return@onPreviewKeyEvent true }
-                                            Key.P -> { posViewModel.openCommentDialog(); return@onPreviewKeyEvent true }
-                                            Key.A -> { posViewModel.openDebtPaymentDialog(); return@onPreviewKeyEvent true }
-                                            Key.K -> { posViewModel.openPreCutDialog(); return@onPreviewKeyEvent true }
-                                            Key.N -> { posViewModel.openCashDrawer(); return@onPreviewKeyEvent true }
-                                            Key.I -> { posViewModel.reprintLastSale(); return@onPreviewKeyEvent true }
-                                        }
-                                    }
-
-                                    when (event.key) {
-                                        Key.F1 -> if (!isDialogSubScreen && currentScreen != "pos" && (userPermissions[Permission.MAKE_SALE] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { currentScreen = "pos"; true } else false
-                                        Key.F2 -> if (!isDialogSubScreen && currentScreen != "customers" && (userPermissions[Permission.CUSTOMER_VIEW] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { customerViewModel.selectCustomer(null); currentScreen = "customers"; true } else false
-                                        Key.F3 -> if (!isDialogSubScreen && currentScreen != "products" && (userPermissions[Permission.PRODUCT_VIEW] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { prodVM.resetToCatalog(); currentScreen = "products"; true } else false
-                                        Key.F4 -> if (currentScreen != "checkout" && currentScreen != "purchases" && (userPermissions[Permission.MANAGE_PURCHASES] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { currentScreen = "purchases"; true } else false
-                                        Key.F5 -> {
-                                            if (currentScreen == "pos") {
-                                                posViewModel.clearSale()
-                                                true
-                                            } else if (!isDialogSubScreen && (userPermissions[Permission.PRODUCT_VIEW] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) {
-                                                currentScreen = "inventory"
-                                                true
-                                            } else false
-                                        }
-                                        Key.F6 -> if (!isDialogSubScreen && (userPermissions[Permission.MANAGE_CASH_MOVEMENTS] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { posViewModel.openCashMovementDialog(CashMovementType.IN); true } else false
-                                        Key.F7 -> if (!isDialogSubScreen && (userPermissions[Permission.MANAGE_CASH_MOVEMENTS] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { posViewModel.openCashMovementDialog(CashMovementType.OUT); true } else false
-                                        Key.F8 -> if (!isDialogSubScreen && (userPermissions[Permission.VIEW_REPORTS] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { currentScreen = "history"; true } else false
-                                        Key.F10 -> if (!isDialogSubScreen && (currentUser?.role == Role.SUPER_ADMIN || (userPermissions[Permission.MANAGE_SETTINGS] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED)) { currentScreen = "settings"; true } else false
-                                        Key.F11 -> if (!isDialogSubScreen && (userPermissions[Permission.PERFORM_CASH_OUT] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED) { currentScreen = "cash_out"; true } else false
-                                        else -> false
-                                    }
-                                } else false
-                            }
-                    ) {
-                        val showCashMovementDialog by posViewModel.showCashMovementDialog.collectAsState()
-                        if (showCashMovementDialog != null) {
-                            CashMovementDialog(posViewModel, type = showCashMovementDialog!!)
-                        }
-
-                        val showPreCutDialog by posViewModel.showPreCutDialog.collectAsState()
-                        if (showPreCutDialog) {
-                            PreCutDialog(posViewModel, currentUserId = currentUser?.username ?: "admin")
-                        }
-
-                        when (currentScreen) {
-                            "dashboard" -> DashboardScreen(dashboardViewModel)
-                            "pos" -> {
-                                val adImages by branchPeripheralViewModel.adImages.collectAsState()
-                                val currentAdIndex by branchPeripheralViewModel.currentAdIndex.collectAsState()
-                                LaunchedEffect(adImages) { while (adImages.size > 1) { kotlinx.coroutines.delay(120_000); branchPeripheralViewModel.nextAd() } }
-                                PosMainScreen(viewModel = posViewModel, userViewModel = userViewModel, adImageUrl = adImages.getOrNull(currentAdIndex) ?: "", currentUserId = currentUser?.username ?: "admin", onLogout = { authViewModel.logout() }, onNavigateToCheckout = { posViewModel.prepareCheckout(); currentScreen = "checkout" }, onNavigateToHistory = { currentScreen = "history" }, onNavigateToSettings = { currentScreen = "settings" }, onNavigateToInventory = { currentScreen = "inventory" })
-                            }
-                            "checkout" -> CheckoutScreen(viewModel = posViewModel, onCancel = { currentScreen = "pos" })
-                            "web_orders" -> WebOrdersScreen(viewModel = posViewModel, onBack = { currentScreen = "pos" }, onNavigateToPos = { currentScreen = "pos" })
-                            "purchases" -> PurchaseModule(viewModel = purchaseViewModel)
-                            "advanced_purchases" -> AdvancedPurchaseModule(viewModel = purchaseViewModel)
-                            "customers" -> CustomerModule(customerViewModel)
-                            "products" -> ProductModule(prodVM)
-                            "expenses" -> ExpenseModule(expenseViewModel, onBack = { currentScreen = "dashboard" })
-                            "history" -> HistoryModule(historyViewModel, onLogout = { authViewModel.logout() })
-                            "inventory" -> InventoryModule(inventoryViewModel)
-                            "restock" -> RestockScreen(restockViewModel, onBack = { currentScreen = "inventory" })
-                            "cash_out" -> CashOutScreen(viewModel = historyViewModel, onLogout = { authViewModel.logout() }, showTotalPreference = branchPeripheralViewModel.showCashOutTotal.collectAsState().value, onNavigateToPos = { currentScreen = "pos" })
-                            "suppliers" -> SupplierModule(supplierViewModel)
-                            "users" -> UserModule(userViewModel)
-                            "contabilidad" -> ContabilidadModule(contabilidadViewModel)
-                            "settings" -> PeripheralSettingsScreen(branchPeripheralViewModel, posViewModel, userViewModel, promotionViewModel, productRepository)
-                        }
-                    }
-                }
+    BoxWithConstraints {
+        // Forzamos modo compacto en Android para evitar saturar la TopAppBar
+        val isAndroid = getPlatform().name.contains("Android")
+        val isCompact = isAndroid || maxWidth < 1100.dp
+        
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                AppDrawerContent(
+                    navigationItems = navigationItems,
+                    currentScreen = currentScreen,
+                    onNavigate = { screen ->
+                        if (screen == "change_branch") { onLogout() }
+                        else { currentScreen = screen }
+                    },
+                    onLogout = onLogout,
+                    currentUser = currentUser,
+                    authViewModel = authViewModel,
+                    onClose = { scope.launch { drawerState.close() } }
+                )
             }
-            LaunchedEffect(currentScreen) { mainFocusRequester.requestFocus() }
-            
-            // Diálogo de Actualización
-            val updateInfo by updateViewModel.updateInfo.collectAsState()
-            if (updateInfo != null) {
-                UpdateDialog(updateViewModel)
+        ) {
+            Scaffold(
+                topBar = {
+                    val currentLabel = navigationItems.find { it.id == currentScreen }?.label ?: ""
+                    TopAppBar(
+                        title = { 
+                            Column {
+                                Text(currentLabel, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                                Text(branch.name.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        },
+                        navigationIcon = { IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, "Menú") } },
+                        actions = {
+                            if (currentScreen == "pos" && !isCompact) {
+                                PosActionIcons(posViewModel)
+                            }
+                            IconButton(onClick = { posViewModel.refreshCatalog() }) { Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.primary) }
+                            Box {
+                                var showMenu by remember { mutableStateOf(false) }
+                                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Opciones") }
+                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                    if (isCompact && currentScreen == "pos") {
+                                        PosMenuContent(posViewModel) { showMenu = false }
+                                        HorizontalDivider()
+                                    }
+                                    DropdownMenuItem(text = { Text("Comentarios Ticket (Alt+P)") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.Notes, null, tint = Color(0xFF2196F3)) }, onClick = { showMenu = false; posViewModel.openCommentDialog() })
+                                    DropdownMenuItem(text = { Text("Realizar Precorte (Alt+K)") }, leadingIcon = { Icon(Icons.Default.Analytics, null, tint = Color(0xFF2196F3)) }, onClick = { showMenu = false; posViewModel.openPreCutDialog() })
+                                    HorizontalDivider()
+                                    DropdownMenuItem(text = { Text("Abrir Cajón (Alt+N)") }, leadingIcon = { Icon(Icons.Default.LockOpen, null, tint = Color.Gray) }, onClick = { showMenu = false; posViewModel.openCashDrawer() })
+                                    DropdownMenuItem(text = { Text("Limpiar Venta (F5)") }, leadingIcon = { Icon(Icons.Default.DeleteSweep, null, tint = Color.Red) }, onClick = { showMenu = false; posViewModel.clearSale() })
+                                }
+                            }
+                        }
+                    )
+                }
+            ) { padding ->
+                Surface(
+                    modifier = Modifier.padding(padding)
+                        .focusRequester(mainFocusRequester)
+                        .focusable()
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown) {
+                                if (event.key == Key.Escape) {
+                                    if (currentScreen == "pos") { posViewModel.handleGlobalEscape { currentScreen = "checkout" }; return@onPreviewKeyEvent true }
+                                    else if (currentScreen == "checkout") { currentScreen = "pos"; return@onPreviewKeyEvent true }
+                                }
+                                if (currentScreen == "pos" && event.isAltPressed) {
+                                    when (event.key) {
+                                        Key.C -> { posViewModel.openCustomerDialog(); return@onPreviewKeyEvent true }
+                                        Key.W -> { posViewModel.putSaleOnHold(); return@onPreviewKeyEvent true }
+                                        Key.R -> { posViewModel.openWithdrawalDialog(); return@onPreviewKeyEvent true }
+                                        Key.G -> { posViewModel.openHeldSalesDialog(); return@onPreviewKeyEvent true }
+                                        Key.D -> { posViewModel.openReturnDialog(); return@onPreviewKeyEvent true }
+                                        Key.P -> { posViewModel.openCommentDialog(); return@onPreviewKeyEvent true }
+                                        Key.A -> { posViewModel.openDebtPaymentDialog(); return@onPreviewKeyEvent true }
+                                        Key.K -> { posViewModel.openPreCutDialog(); return@onPreviewKeyEvent true }
+                                        Key.N -> { posViewModel.openCashDrawer(); return@onPreviewKeyEvent true }
+                                        Key.I -> { posViewModel.reprintLastSale(); return@onPreviewKeyEvent true }
+                                    }
+                                }
+                                when (event.key) {
+                                    Key.F1 -> if (currentScreen != "pos") { currentScreen = "pos"; true } else false
+                                    Key.F2 -> if (currentScreen != "customers") { customerViewModel.selectCustomer(null); currentScreen = "customers"; true } else false
+                                    Key.F3 -> if (currentScreen != "products") { prodVM.resetToCatalog(); currentScreen = "products"; true } else false
+                                    Key.F4 -> if (currentScreen != "purchases") { currentScreen = "purchases"; true } else false
+                                    Key.F5 -> if (currentScreen == "pos") { posViewModel.clearSale(); true } else { currentScreen = "inventory"; true }
+                                    Key.F8 -> if (currentScreen != "history") { currentScreen = "history"; true } else false
+                                    Key.F10 -> if (currentScreen != "settings") { currentScreen = "settings"; true } else false
+                                    Key.F11 -> if (currentScreen != "cash_out") { currentScreen = "cash_out"; true } else false
+                                    Key.F12 -> if (currentScreen != "dashboard") { currentScreen = "dashboard"; true } else false
+                                    else -> false
+                                }
+                            } else false
+                        }
+                ) {
+                    val showCashMovementDialog by posViewModel.showCashMovementDialog.collectAsState()
+                    if (showCashMovementDialog != null) { CashMovementDialog(posViewModel, type = showCashMovementDialog!!) }
+                    val showPreCutDialog by posViewModel.showPreCutDialog.collectAsState()
+                    if (showPreCutDialog) { PreCutDialog(posViewModel, currentUserId = currentUser?.username ?: "admin") }
+                    when (currentScreen) {
+                        "dashboard" -> DashboardScreen(dashboardViewModel)
+                        "pos" -> {
+                            val adImages by branchPeripheralViewModel.adImages.collectAsState()
+                            val currentAdIndex by branchPeripheralViewModel.currentAdIndex.collectAsState()
+                            LaunchedEffect(adImages) { while (adImages.size > 1) { kotlinx.coroutines.delay(120_000); branchPeripheralViewModel.nextAd() } }
+                            PosMainScreen(viewModel = posViewModel, userViewModel = userViewModel, adImageUrl = adImages.getOrNull(currentAdIndex) ?: "", currentUserId = currentUser?.username ?: "admin", onLogout = { onLogout() }, onNavigateToCheckout = { posViewModel.prepareCheckout(); currentScreen = "checkout" }, onNavigateToHistory = { currentScreen = "history" }, onNavigateToSettings = { currentScreen = "settings" }, onNavigateToInventory = { currentScreen = "inventory" })
+                        }
+                        "checkout" -> CheckoutScreen(viewModel = posViewModel, onCancel = { currentScreen = "pos" })
+                        "web_orders" -> WebOrdersScreen(viewModel = posViewModel, onBack = { currentScreen = "pos" }, onNavigateToPos = { currentScreen = "pos" })
+                        "purchases" -> PurchaseModule(viewModel = purchaseViewModel)
+                        "advanced_purchases" -> AdvancedPurchaseModule(viewModel = purchaseViewModel)
+                        "customers" -> CustomerModule(customerViewModel)
+                        "products" -> ProductModule(prodVM)
+                        "expenses" -> ExpenseModule(expenseViewModel, onBack = { currentScreen = "dashboard" })
+                        "history" -> HistoryModule(historyViewModel, onLogout = { onLogout() })
+                        "inventory" -> InventoryModule(inventoryViewModel)
+                        "restock" -> RestockScreen(restockViewModel, onBack = { currentScreen = "inventory" })
+                        "cash_out" -> CashOutScreen(viewModel = historyViewModel, onLogout = { onLogout() }, showTotalPreference = branchPeripheralViewModel.showCashOutTotal.collectAsState().value, onNavigateToPos = { currentScreen = "pos" })
+                        "suppliers" -> SupplierModule(supplierViewModel)
+                        "users" -> UserModule(userViewModel)
+                        "contabilidad" -> ContabilidadModule(contabilidadViewModel)
+                        "settings" -> PeripheralSettingsScreen(branchPeripheralViewModel, posViewModel, userViewModel, promotionViewModel, productRepository)
+                    }
+                }
             }
         }
+        LaunchedEffect(currentScreen) { mainFocusRequester.requestFocus() }
+        val updateInfo by updateViewModel.updateInfo.collectAsState()
+        if (updateInfo != null) { UpdateDialog(updateViewModel) }
+        val showUserPanel by authViewModel.showUserPanel.collectAsState()
+        if (showUserPanel) { UserPanelFullScreen(authViewModel, onDismiss = { authViewModel.closeUserPanel() }) }
     }
+}
+
+@Composable
+fun PosActionIcons(viewModel: PosViewModel) {
+    IconButton(onClick = { viewModel.openCustomerDialog() }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.People, "Cliente", tint = Color(0xFF673AB7), modifier = Modifier.size(20.dp)); Text("Alt+C", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp) } }
+    IconButton(onClick = { viewModel.putSaleOnHold() }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Pause, "Espera", tint = Color(0xFFFFA500), modifier = Modifier.size(20.dp)); Text("Alt+W", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp) } }
+    IconButton(onClick = { viewModel.openHeldSalesDialog() }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Save, "Guardados", tint = Color(0xFF2196F3), modifier = Modifier.size(20.dp)); Text("Alt+G", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp) } }
+    IconButton(onClick = { viewModel.openWithdrawalDialog() }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Atm, "Retiro", tint = Color(0xFF2196F3), modifier = Modifier.size(20.dp)); Text("Alt+R", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp) } }
+    IconButton(onClick = { viewModel.openReturnDialog() }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.SyncAlt, "Devolución", tint = Color(0xFFE91E63), modifier = Modifier.size(20.dp)); Text("Alt+D", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp) } }
+    IconButton(onClick = { viewModel.openDebtPaymentDialog() }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Payments, "Abono", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp)); Text("Alt+A", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp) } }
+    IconButton(onClick = { viewModel.reprintLastSale() }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Print, "Reimprimir", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp)); Text("Alt+I", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp) } }
+    VerticalDivider(modifier = Modifier.height(24.dp).padding(horizontal = 4.dp))
+    IconButton(onClick = { viewModel.openCashMovementDialog(CashMovementType.IN) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.AddCircle, "Entrada", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp)); Text("F6", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp) } }
+    IconButton(onClick = { viewModel.openCashMovementDialog(CashMovementType.OUT) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.RemoveCircle, "Salida", tint = Color.Red, modifier = Modifier.size(20.dp)); Text("F7", style = MaterialTheme.typography.labelSmall, fontSize = 9.sp) } }
+}
+
+@Composable
+fun PosMenuContent(viewModel: PosViewModel, onDismiss: () -> Unit) {
+    DropdownMenuItem(text = { Text("Traer Cliente") }, leadingIcon = { Icon(Icons.Default.People, null, tint = Color(0xFF673AB7)) }, onClick = { onDismiss(); viewModel.openCustomerDialog() })
+    DropdownMenuItem(text = { Text("Poner en Espera") }, leadingIcon = { Icon(Icons.Default.Pause, null, tint = Color(0xFFFFA500)) }, onClick = { onDismiss(); viewModel.putSaleOnHold() })
+    DropdownMenuItem(text = { Text("Tickets Guardados") }, leadingIcon = { Icon(Icons.Default.Save, null, tint = Color(0xFF2196F3)) }, onClick = { onDismiss(); viewModel.openHeldSalesDialog() })
+    DropdownMenuItem(text = { Text("Retiro Efectivo") }, leadingIcon = { Icon(Icons.Default.Atm, null, tint = Color(0xFF2196F3)) }, onClick = { onDismiss(); viewModel.openWithdrawalDialog() })
+    DropdownMenuItem(text = { Text("Devolución / Cambio") }, leadingIcon = { Icon(Icons.Default.SyncAlt, null, tint = Color(0xFFE91E63)) }, onClick = { onDismiss(); viewModel.openReturnDialog() })
+    DropdownMenuItem(text = { Text("Abonos / Deuda") }, leadingIcon = { Icon(Icons.Default.Payments, null, tint = Color(0xFF4CAF50)) }, onClick = { onDismiss(); viewModel.openDebtPaymentDialog() })
+    DropdownMenuItem(text = { Text("Reimprimir Última") }, leadingIcon = { Icon(Icons.Default.Print, null, tint = Color(0xFF4CAF50)) }, onClick = { onDismiss(); viewModel.reprintLastSale() })
+    HorizontalDivider()
+    DropdownMenuItem(text = { Text("Entrada de Dinero (F6)") }, leadingIcon = { Icon(Icons.Default.AddCircle, null, tint = Color(0xFF4CAF50)) }, onClick = { onDismiss(); viewModel.openCashMovementDialog(CashMovementType.IN) })
+    DropdownMenuItem(text = { Text("Salida de Dinero (F7)") }, leadingIcon = { Icon(Icons.Default.RemoveCircle, null, tint = Color.Red) }, onClick = { onDismiss(); viewModel.openCashMovementDialog(CashMovementType.OUT) })
 }
 
 data class NavigationItem(val id: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val shortcut: String? = null, val permission: Permission? = null)
@@ -524,14 +457,9 @@ data class NavigationItem(val id: String, val label: String, val icon: androidx.
 fun UserPanelFullScreen(viewModel: AuthViewModel, onDismiss: () -> Unit) {
     val stats by viewModel.userStats.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Header
                 Surface(color = Color(0xFF0056A0), contentColor = Color.White) {
                     Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White) }
@@ -539,122 +467,25 @@ fun UserPanelFullScreen(viewModel: AuthViewModel, onDismiss: () -> Unit) {
                         Text("MI CUENTA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     }
                 }
-
-                if (stats == null) {
-                    Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                } else {
-                    val days = listOf("Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom")
-                    
+                val currentStats = stats
+                if (currentStats == null) { Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() } }
+                else {
                     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                         val isSmall = maxWidth < 700.dp
-                        
-                        @Composable
-                        fun ColumnScope.LeftPart() {
-                            Surface(
-                                modifier = Modifier.weight(1f).fillMaxWidth(),
-                                color = Color(0xFFF5F7FA)
-                            ) {
-                                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Surface(modifier = Modifier.size(60.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
-                                            }
-                                        }
-                                        Spacer(Modifier.width(16.dp))
-                                        Column {
-                                            Text(currentUser?.username?.uppercase() ?: "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-                                            Text(currentUser?.role?.name ?: "", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
-                                        }
-                                    }
-
-                                    HorizontalDivider()
-
-                                    Text("REGISTRO DE HOY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    
-                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        InfoRow(label = "ENTRADA REAL", value = stats!!.checkInTime?.let { formatTimestamp(it).split(" ").last().take(5) } ?: "--:--", icon = Icons.AutoMirrored.Filled.Login, color = Color(0xFF1976D2))
-                                        InfoRow(label = "SALIDA REAL", value = stats!!.checkOutTime?.let { formatTimestamp(it).split(" ").last().take(5) } ?: "--:--", icon = Icons.AutoMirrored.Filled.Logout, color = Color(0xFFD32F2F))
-                                    }
-                                    
-                                    Spacer(Modifier.height(12.dp))
-                                    Text("JORNADA ASIGNADA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Día de descanso:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                        Text(stats!!.restDay, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = if(stats!!.restDay == "No definido") Color.Red else Color.Unspecified)
-                                    }
-                                }
-                            }
-                        }
-
-                        @Composable
-                        fun RowScope.LeftPartRow() {
-                            Surface(
-                                modifier = Modifier.weight(1f).fillMaxHeight(),
-                                color = Color(0xFFF5F7FA)
-                            ) {
-                                Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Surface(modifier = Modifier.size(60.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
-                                            }
-                                        }
-                                        Spacer(Modifier.width(16.dp))
-                                        Column {
-                                            Text(currentUser?.username?.uppercase() ?: "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-                                            Text(currentUser?.role?.name ?: "", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
-                                        }
-                                    }
-
-                                    HorizontalDivider()
-
-                                    Text("REGISTRO DE HOY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    
-                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        InfoRow(label = "ENTRADA REAL", value = stats!!.checkInTime?.let { formatTimestamp(it).split(" ").last().take(5) } ?: "--:--", icon = Icons.AutoMirrored.Filled.Login, color = Color(0xFF1976D2))
-                                        InfoRow(label = "SALIDA REAL", value = stats!!.checkOutTime?.let { formatTimestamp(it).split(" ").last().take(5) } ?: "--:--", icon = Icons.AutoMirrored.Filled.Logout, color = Color(0xFFD32F2F))
-                                    }
-                                    
-                                    Spacer(Modifier.height(12.dp))
-                                    Text("JORNADA ASIGNADA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Día de descanso:", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                        Text(stats!!.restDay, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = if(stats!!.restDay == "No definido") Color.Red else Color.Unspecified)
-                                    }
-                                    
-                                    Spacer(Modifier.weight(1f))
-                                    Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
-                                        Text("CERRAR")
-                                    }
-                                }
-                            }
-                        }
-
-                        @Composable
-                        fun ColumnScope.RightPart() {
-                            Surface(modifier = Modifier.weight(1.5f).fillMaxWidth(), color = Color.White) {
-                                RightContent(stats, onDismiss, true)
-                            }
-                        }
-
-                        @Composable
-                        fun RowScope.RightPartRow() {
-                            Surface(modifier = Modifier.weight(1.5f).fillMaxHeight(), color = Color.White) {
-                                RightContent(stats, onDismiss, false)
-                            }
-                        }
-
                         if (isSmall) {
                             Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                                LeftPart()
-                                RightPart()
+                                UserPanelHeader(currentUser, currentStats)
+                                RightContent(currentStats, onDismiss, true)
                             }
                         } else {
                             Row(modifier = Modifier.fillMaxSize()) {
-                                LeftPartRow()
+                                Column(modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0xFFF5F7FA)).padding(32.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                                    UserPanelHeaderContent(currentUser, currentStats, true)
+                                    Spacer(Modifier.weight(1f))
+                                    Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(12.dp)) { Text("CERRAR PANEL", fontWeight = FontWeight.Bold) }
+                                }
                                 VerticalDivider(thickness = 1.dp, color = Color.LightGray.copy(alpha = 0.5f))
-                                RightPartRow()
+                                Surface(modifier = Modifier.weight(1.5f).fillMaxHeight(), color = Color.White) { RightContent(currentStats, onDismiss, false) }
                             }
                         }
                     }
@@ -662,6 +493,31 @@ fun UserPanelFullScreen(viewModel: AuthViewModel, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+fun UserPanelHeader(currentUser: User?, stats: UserPanelStats) {
+    Column(modifier = Modifier.fillMaxWidth().background(Color(0xFFF5F7FA)).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        UserPanelHeaderContent(currentUser, stats, false)
+    }
+}
+
+@Composable
+fun UserPanelHeaderContent(currentUser: User?, stats: UserPanelStats, isLarge: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(modifier = Modifier.size(if(isLarge) 80.dp else 60.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)) {
+            Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(if(isLarge) 56.dp else 40.dp)) }
+        }
+        Spacer(Modifier.width(if(isLarge) 20.dp else 16.dp))
+        Column {
+            Text(currentUser?.username?.uppercase() ?: "USUARIO", style = if(isLarge) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+            Text(currentUser?.role?.name ?: "ROL", style = if(isLarge) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium, color = Color.Gray)
+        }
+    }
+    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+    InfoRow("Empresa", "PLAZITA POS", Icons.Default.Business, Color(0xFF0056A0))
+    InfoRow("Estatus de Cuenta", "ACTIVA", Icons.Default.VerifiedUser, Color(0xFF2E7D32))
+    InfoRow("Días Trabajados (Semana)", "${stats.daysWorked} de 7", Icons.Default.EventAvailable, Color(0xFFFF9800))
 }
 
 @Composable
@@ -673,7 +529,6 @@ fun RightContent(stats: UserPanelStats?, onDismiss: () -> Unit, isSmall: Boolean
             Text("ESTA SEMANA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFF0056A0), modifier = Modifier.padding(horizontal = 16.dp))
             Icon(Icons.Default.ChevronRight, null, tint = Color.Gray)
         }
-
         Spacer(Modifier.height(16.dp))
         Text("📅 DÍAS DE LA SEMANA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
         Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F4F9)), shape = RoundedCornerShape(16.dp)) {
@@ -700,7 +555,6 @@ fun RightContent(stats: UserPanelStats?, onDismiss: () -> Unit, isSmall: Boolean
                 }
             }
         }
-
         Spacer(Modifier.height(24.dp))
         Text("📈 RESUMEN DE INGRESOS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
         Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))) {
@@ -722,9 +576,7 @@ fun RightContent(stats: UserPanelStats?, onDismiss: () -> Unit, isSmall: Boolean
         }
         if (isSmall) {
             Spacer(Modifier.height(24.dp))
-            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(8.dp)) {
-                Text("CERRAR MI CUENTA")
-            }
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(8.dp)) { Text("CERRAR MI CUENTA") }
         }
     }
 }
@@ -755,9 +607,7 @@ fun UpdateDialog(viewModel: com.abtsplazita.posplazita.ui.UpdateViewModel) {
     val isDownloading by viewModel.isDownloading.collectAsState()
     val progress by viewModel.downloadProgress.collectAsState()
     val error by viewModel.error.collectAsState()
-
     if (info == null) return
-
     AlertDialog(
         onDismissRequest = { if (!info!!.forceUpdate && !isDownloading) viewModel.dismissUpdate() },
         title = { Text("Actualización Disponible (v${info!!.version})", fontWeight = FontWeight.Black) },
@@ -766,38 +616,111 @@ fun UpdateDialog(viewModel: com.abtsplazita.posplazita.ui.UpdateViewModel) {
                 if (!info!!.releaseNotes.isNullOrBlank()) {
                     Text("Novedades:", fontWeight = FontWeight.Bold)
                     Text(info!!.releaseNotes!!, style = MaterialTheme.typography.bodyMedium)
-                } else {
-                    Text("Hay una nueva versión del sistema disponible para descargar e instalar.")
-                }
-
+                } else { Text("Hay una nueva versión del sistema disponible para descargar e instalar.") }
                 if (isDownloading) {
                     Spacer(Modifier.height(16.dp))
                     Text("Descargando actualización... ${(progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
-                    )
+                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)))
                 }
-
                 if (error != null) {
                     Text(error!!, color = Color.Red, style = MaterialTheme.typography.labelSmall)
                     Button(onClick = { viewModel.clearError() }) { Text("REINTENTAR") }
                 }
             }
         },
-        confirmButton = {
-            if (!isDownloading) {
-                Button(onClick = { viewModel.startUpdate() }) {
-                    Text("ACTUALIZAR AHORA")
-                }
-            }
-        },
-        dismissButton = {
-            if (!info!!.forceUpdate && !isDownloading) {
-                TextButton(onClick = { viewModel.dismissUpdate() }) {
-                    Text("MÁS TARDE")
-                }
-            }
-        }
+        confirmButton = { if (!isDownloading) { Button(onClick = { viewModel.startUpdate() }) { Text("ACTUALIZAR AHORA") } } },
+        dismissButton = { if (!info!!.forceUpdate && !isDownloading) { TextButton(onClick = { viewModel.dismissUpdate() }) { Text("MÁS TARDE") } } }
     )
+}
+
+@Composable
+fun AppDrawerContent(
+    navigationItems: List<NavigationItem>,
+    currentScreen: String,
+    onNavigate: (String) -> Unit,
+    onLogout: () -> Unit,
+    currentUser: User?,
+    authViewModel: AuthViewModel,
+    onClose: () -> Unit
+) {
+    ModalDrawerSheet(
+        drawerContainerColor = Color.White,
+        drawerContentColor = Color.Black,
+        modifier = Modifier.width(320.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 16.dp)) {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape, modifier = Modifier.size(48.dp)) {
+                    Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Store, null, tint = MaterialTheme.colorScheme.primary) }
+                }
+                Spacer(Modifier.width(16.dp))
+                Column {
+                    Text("PLAZITA POS", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                    Text("Sistema de Gestión", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
+            }
+            
+            HorizontalDivider(modifier = Modifier.padding(bottom = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+
+            Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                navigationItems.forEach { item ->
+                    val isSelected = currentScreen == item.id
+                    NavigationDrawerItem(
+                        label = { 
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (item.shortcut != null) {
+                                    Surface(color = if (isSelected) Color.White else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), shape = RoundedCornerShape(4.dp)) {
+                                        Text(item.shortcut, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                }
+                                Text(item.label, fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium)
+                            }
+                        },
+                        selected = isSelected,
+                        onClick = { onNavigate(item.id); onClose() },
+                        icon = { Icon(item.icon, contentDescription = null, tint = if (isSelected) Color.White else MaterialTheme.colorScheme.primary) },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedIconColor = Color.White,
+                            selectedTextColor = Color.White,
+                            unselectedIconColor = MaterialTheme.colorScheme.primary,
+                            unselectedTextColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                }
+            }
+
+            if (currentUser != null) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color.LightGray.copy(alpha = 0.2f))
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().clickable { authViewModel.openUserPanel() }
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AccountCircle, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(text = currentUser.username.uppercase(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
+                            Text(text = currentUser.role.name, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("v1.0.9", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                TextButton(onClick = onLogout) {
+                    Icon(Icons.AutoMirrored.Filled.Logout, null, modifier = Modifier.size(18.dp), tint = Color.Red)
+                    Spacer(Modifier.width(8.dp))
+                    Text("CERRAR SESIÓN", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
 }

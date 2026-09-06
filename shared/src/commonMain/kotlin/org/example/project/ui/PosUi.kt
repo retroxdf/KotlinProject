@@ -78,6 +78,7 @@ fun PosMainScreen(
     val showCustomerDialog by viewModel.showCustomerDialog.collectAsState()
     val showAddCustomerDialog by viewModel.showAddCustomerDialog.collectAsState()
     val showDebtPaymentDialog by viewModel.showDebtPaymentDialog.collectAsState()
+    val selectedPriceLevel by viewModel.selectedPriceLevel.collectAsState()
     val showHeldSalesDialog by viewModel.showHeldSalesDialog.collectAsState()
     val showReturnDialog by viewModel.showReturnDialog.collectAsState()
     val showWithdrawalDialog by viewModel.showWithdrawalDialog.collectAsState()
@@ -562,7 +563,13 @@ fun PosMainScreen(
                                             )
                                             
                                             Text(
-                                                text = "$${product.price3.formatPrice()}",
+                                                text = "$${when(selectedPriceLevel) {
+                                                    1 -> product.price1
+                                                    2 -> product.price2
+                                                    3 -> product.price3
+                                                    4 -> product.price4
+                                                    else -> product.price2
+                                                }.formatPrice()}",
                                                 style = if (isSmall) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
                                                 fontWeight = FontWeight.Black,
                                                 modifier = Modifier.width(if (isSmall) 80.dp else 120.dp),

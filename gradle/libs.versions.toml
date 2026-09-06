@@ -62,6 +62,7 @@ firebase-firestore = { module = "dev.gitlive:firebase-firestore", version.ref = 
 firebase-android-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-android-auth = { module = "com.google.firebase:firebase-auth" }
 firebase-android-firestore = { module = "com.google.firebase:firebase-firestore" }
+firebase-android-common = { module = "com.google.firebase:firebase-common" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

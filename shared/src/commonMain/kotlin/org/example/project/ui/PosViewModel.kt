@@ -136,84 +136,6 @@ class PosViewModel(
     private val _sidebarIndex = MutableStateFlow(0)
     val sidebarIndex = _sidebarIndex.asStateFlow()
 
-    init {
-        startLiveSearch()
-        // Rotación automática del sidebar cada 10 segundos
-        viewModelScope.launch {
-            while (true) {
-                delay(10000)
-                val items = sidebarItems.value
-                if (items.isNotEmpty()) {
-                    _sidebarIndex.value = (_sidebarIndex.value + 1) % items.size
-                }
-            }
-        }
-        viewModelScope.launch {
-            promotionRepository?.getAllPromotions()?.collect { promos ->
-                val now = com.abtsplazita.posplazita.currentTimeMillis()
-                val currentPromos = promos.filter { 
-                    it.isActive && now >= it.startDate && now <= it.endDate 
-                }
-                _activePromotions.value = currentPromos
-                currentSaleManager.setPromotions(currentPromos)
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository?.getAllSettings()?.collect { settings ->
-                val layoutJson = settings["ticket_layout_json"]
-                val customLayout = layoutJson?.let {
-                    try {
-                        kotlinx.serialization.json.Json.decodeFromString<List<com.abtsplazita.posplazita.domain.TicketElement>>(it)
-                    } catch (e: Exception) { null }
-                }
-
-                _ticketConfig.value = TicketConfig(
-                    logoPath = settings["ticket_logo_path"],
-                    facebook = settings["ticket_facebook"],
-                    instagram = settings["ticket_instagram"],
-                    whatsapp = settings["ticket_whatsapp"],
-                    thanksMessage = settings["ticket_thanks_message"] ?: "Gracias por su compra!",
-                    branchAddress = settings["ticket_branch_address"],
-                    branchPhone = settings["ticket_branch_phone"],
-                    showBranchInfo = settings["ticket_show_branch"]?.toBoolean() ?: true,
-                    ticketIdPrefix = settings["ticket_id_prefix"] ?: "S",
-                    layout = customLayout ?: TicketConfig.defaultLayout
-                )
-                
-                _branchName.value = settings["${branchId}_name"] ?: ""
-
-                // Configuración de Mayoreo Automático
-                val wholesaleEnabled = settings["${branchId}_wholesale_enabled"]?.toBoolean() ?: false
-                currentSaleManager.setWholesaleEnabled(wholesaleEnabled)
-            }
-        }
-        startWebOrdersObservation()
-        startDeletionRequestsObservation()
-        startDeletionLogsObservation()
-        viewModelScope.launch {
-            combine(
-                _selectedTerminal, 
-                saleRepository.getSales(branchId), 
-                cashMovementRepository?.getMovements(branchId) ?: flowOf(emptyList()),
-                cashOutRepository?.getCashOuts(branchId) ?: flowOf(emptyList())
-            ) { terminal, allSales, allMovements, allCashOuts ->
-                if (terminal == null) 0.0
-                else {
-                    val lastCashOut = allCashOuts.filter { it.terminalId == terminal.id }.maxByOrNull { it.timestamp }
-                    val startTime = lastCashOut?.timestamp ?: 0L
-
-                    val salesCash = allSales.filter { it.terminalId == terminal.id && it.timestamp > startTime }.sumOf { it.cashAmount }
-                    val entriesCash = allMovements.filter { it.terminalId == terminal.id && it.timestamp > startTime && it.type == CashMovementType.IN }.sumOf { it.amount }
-                    val exitsCash = allMovements.filter { it.terminalId == terminal.id && it.timestamp > startTime && it.type == CashMovementType.OUT }.sumOf { it.amount }
-                    
-                    salesCash + entriesCash - exitsCash
-                }
-            }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { balance ->
-                _cashInDrawer.value = balance
-            }
-        }
-    }
-
     val availableTerminals: StateFlow<List<PosTerminal>> = if (terminalRepository != null) {
         terminalRepository.getTerminalsByBranch(branchId)
             .onEach { terminals ->
@@ -519,6 +441,8 @@ class PosViewModel(
             addProduct(dummyProduct, 9999.0)
             onSearchQueryClear() // Limpiar el buscador principal tras agregar
             closeCommonProductDialog()
+        } else {
+            setErrorMessage("No puedes vender un producto sin precio.")
         }
     }
 
@@ -1274,6 +1198,20 @@ class PosViewModel(
 
     fun addProduct(product: Product, stock: Double, quantity: Double? = null, isReturn: Boolean = false) {
         checkoutManager.resetOverlay()
+
+        // Validar que el producto tenga precio según el nivel seleccionado
+        val price = when(_selectedPriceLevel.value) {
+            1 -> product.price1
+            2 -> product.price2
+            3 -> product.price3
+            4 -> product.price4
+            else -> product.price2
+        }
+        
+        if (price <= 0 && !isReturn && !product.isService) {
+            setErrorMessage("No puedes vender un producto sin precio.")
+            return
+        }
         
         val added = currentSaleManager.addItem(product, branchId, stock, quantity, isReturn = isReturn)
         if (added) {
@@ -1569,6 +1507,84 @@ class PosViewModel(
                         }
                     }
                 }
+        }
+    }
+
+    init {
+        startLiveSearch()
+        // Rotación automática del sidebar cada 10 segundos
+        viewModelScope.launch {
+            while (true) {
+                delay(10000)
+                val items = sidebarItems.value
+                if (items.isNotEmpty()) {
+                    _sidebarIndex.value = (_sidebarIndex.value + 1) % items.size
+                }
+            }
+        }
+        viewModelScope.launch {
+            promotionRepository?.getAllPromotions()?.collect { promos ->
+                val now = com.abtsplazita.posplazita.currentTimeMillis()
+                val currentPromos = promos.filter { 
+                    it.isActive && now >= it.startDate && now <= it.endDate 
+                }
+                _activePromotions.value = currentPromos
+                currentSaleManager.setPromotions(currentPromos)
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository?.getAllSettings()?.collect { settings ->
+                val layoutJson = settings["ticket_layout_json"]
+                val customLayout = layoutJson?.let {
+                    try {
+                        kotlinx.serialization.json.Json.decodeFromString<List<com.abtsplazita.posplazita.domain.TicketElement>>(it)
+                    } catch (e: Exception) { null }
+                }
+
+                _ticketConfig.value = TicketConfig(
+                    logoPath = settings["ticket_logo_path"],
+                    facebook = settings["ticket_facebook"],
+                    instagram = settings["ticket_instagram"],
+                    whatsapp = settings["ticket_whatsapp"],
+                    thanksMessage = settings["ticket_thanks_message"] ?: "Gracias por su compra!",
+                    branchAddress = settings["ticket_branch_address"],
+                    branchPhone = settings["ticket_branch_phone"],
+                    showBranchInfo = settings["ticket_show_branch"]?.toBoolean() ?: true,
+                    ticketIdPrefix = settings["ticket_id_prefix"] ?: "S",
+                    layout = customLayout ?: TicketConfig.defaultLayout
+                )
+                
+                _branchName.value = settings["${branchId}_name"] ?: ""
+
+                // Configuración de Mayoreo Automático
+                val wholesaleEnabled = settings["${branchId}_wholesale_enabled"]?.toBoolean() ?: false
+                currentSaleManager.setWholesaleEnabled(wholesaleEnabled)
+            }
+        }
+        startWebOrdersObservation()
+        startDeletionRequestsObservation()
+        startDeletionLogsObservation()
+        viewModelScope.launch {
+            combine(
+                _selectedTerminal, 
+                saleRepository.getSales(branchId), 
+                cashMovementRepository?.getMovements(branchId) ?: flowOf(emptyList()),
+                cashOutRepository?.getCashOuts(branchId) ?: flowOf(emptyList())
+            ) { terminal, allSales, allMovements, allCashOuts ->
+                if (terminal == null) 0.0
+                else {
+                    val lastCashOut = allCashOuts.filter { it.terminalId == terminal.id }.maxByOrNull { it.timestamp }
+                    val startTime = lastCashOut?.timestamp ?: 0L
+
+                    val salesCash = allSales.filter { it.terminalId == terminal.id && it.timestamp > startTime }.sumOf { it.cashAmount }
+                    val entriesCash = allMovements.filter { it.terminalId == terminal.id && it.timestamp > startTime && it.type == CashMovementType.IN }.sumOf { it.amount }
+                    val exitsCash = allMovements.filter { it.terminalId == terminal.id && it.timestamp > startTime && it.type == CashMovementType.OUT }.sumOf { it.amount }
+                    
+                    salesCash + entriesCash - exitsCash
+                }
+            }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { balance ->
+                _cashInDrawer.value = balance
+            }
         }
     }
 }
