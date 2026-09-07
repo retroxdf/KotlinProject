@@ -261,6 +261,7 @@ class FirebaseManager {
     suspend fun fetchEmployees() = cloudProvider.fetchEmployees()
     
     suspend fun fetchLatestUpdateInfo() = cloudProvider.fetchLatestUpdateInfo()
+    suspend fun fetchProductByBarcode(barcode: String) = cloudProvider.fetchProductByBarcode(barcode)
 
     suspend fun fetchUsers() = cloudProvider.fetchUsers()
     suspend fun fetchBranches() = cloudProvider.fetchBranches()

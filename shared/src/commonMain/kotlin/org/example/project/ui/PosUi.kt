@@ -174,14 +174,44 @@ fun PosMainScreen(
                                         Key.DirectionUp -> { viewModel.moveFocus(-1); true }
                                         Key.DirectionRight -> { viewModel.incrementSelectedCartItem(); true }
                                         Key.DirectionLeft -> { viewModel.decrementSelectedCartItem(); true }
-                                        Key.Enter, Key.NumPadEnter -> { if (showSearchResults) viewModel.selectCurrentItem() else viewModel.onSearchSubmit(); true }
-                                        Key.Delete -> {
-                                            if (currentFocusArea == PosViewModel.FocusArea.CART) {
-                                                if (selectedCartIndex in items.indices) { viewModel.removeSaleItem(items[selectedCartIndex]); true } else false
-                                            } else if (currentFocusArea == PosViewModel.FocusArea.SEARCH_BAR) { viewModel.clearSale(); true } else false
+                                        Key.Enter, Key.NumPadEnter -> { 
+                                            if (showSaleSuccess) {
+                                                viewModel.clearChange()
+                                            } else if (showSearchResults) {
+                                                viewModel.selectCurrentItem()
+                                            } else {
+                                                viewModel.onSearchSubmit()
+                                            }
+                                            true 
+                                        }
+                                        Key.F1 -> {
+                                            if (showSaleSuccess) {
+                                                viewModel.clearChange()
+                                                true
+                                            } else false
+                                        }
+                                        Key.Delete, Key.Backspace -> {
+                                            if (showSearchResults) {
+                                                viewModel.onSearchQueryClear()
+                                                true
+                                            } else if (currentFocusArea == PosViewModel.FocusArea.CART) {
+                                                // Escenario 1: Producto seleccionado (azul). Borrar solo ese.
+                                                if (selectedCartIndex in items.indices) {
+                                                    viewModel.removeSaleItem(items[selectedCartIndex])
+                                                    true
+                                                } else false
+                                            } else if (currentFocusArea == PosViewModel.FocusArea.SEARCH_BAR && searchQuery.text.isEmpty()) {
+                                                // Escenario 2: En buscador vacío. Borrar TODA la venta (solo con Delete/Supr).
+                                                if (event.key == Key.Delete) {
+                                                    viewModel.clearSale()
+                                                    true
+                                                } else false
+                                            } else false
                                         }
                                         Key.Escape -> { 
-                                            if (showSearchResults) {
+                                            if (showSaleSuccess) {
+                                                viewModel.clearChange()
+                                            } else if (showSearchResults) {
                                                 viewModel.onSearchQueryClear()
                                             } else if (items.isNotEmpty()) {
                                                 onNavigateToCheckout()

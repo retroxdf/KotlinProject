@@ -127,6 +127,7 @@ interface CloudProvider {
     suspend fun fetchTopSellingProducts(branchId: String, limit: Int): List<Pair<String, Double>>
     
     suspend fun fetchLatestUpdateInfo(): AppUpdateInfo?
+    suspend fun fetchProductByBarcode(barcode: String): Product?
 }
 
 expect fun getCloudProvider(): CloudProvider

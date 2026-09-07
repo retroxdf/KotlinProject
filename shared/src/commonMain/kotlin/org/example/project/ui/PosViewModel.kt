@@ -74,10 +74,14 @@ class PosViewModel(
     }
 
     private fun hasPermission(permission: Permission): Boolean {
+        val role = _currentUser.value?.role
+        if (role == Role.SUPER_ADMIN || role == Role.GERENTE) return true
         return _userPermissions.value[permission] == PermissionLevel.ENABLED
     }
 
     private fun isRestricted(permission: Permission): Boolean {
+        val role = _currentUser.value?.role
+        if (role == Role.SUPER_ADMIN || role == Role.GERENTE) return false
         return _userPermissions.value[permission] == PermissionLevel.RESTRICTED
     }
 
@@ -156,6 +160,12 @@ class PosViewModel(
     private val _isGroupingEnabled = MutableStateFlow(true)
     val isGroupingEnabled = _isGroupingEnabled.asStateFlow()
 
+    private val _addAtTop = MutableStateFlow(false)
+    val addAtTop = _addAtTop.asStateFlow()
+
+    private val _allowNegativeStock = MutableStateFlow(false)
+    val allowNegativeStock = _allowNegativeStock.asStateFlow()
+
     private val _selectedPriceLevel = MutableStateFlow(2)
     val selectedPriceLevel = _selectedPriceLevel.asStateFlow()
 
@@ -229,6 +239,93 @@ class PosViewModel(
 
     private val _lastSale = MutableStateFlow<Sale?>(null)
     private val _lastSaleItems = MutableStateFlow<List<SaleItem>>(emptyList())
+
+    init {
+        startLiveSearch()
+        // Rotación automática del sidebar cada 10 segundos
+        viewModelScope.launch {
+            while (true) {
+                delay(10000)
+                val items = sidebarItems.value
+                if (items.isNotEmpty()) {
+                    _sidebarIndex.value = (_sidebarIndex.value + 1) % items.size
+                }
+            }
+        }
+        viewModelScope.launch {
+            promotionRepository?.getAllPromotions()?.collect { promos ->
+                val now = com.abtsplazita.posplazita.currentTimeMillis()
+                val currentPromos = promos.filter { 
+                    it.isActive && now >= it.startDate && now <= it.endDate 
+                }
+                _activePromotions.value = currentPromos
+                currentSaleManager.setPromotions(currentPromos)
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository?.getAllSettings()?.collect { settings ->
+                val layoutJson = settings["ticket_layout_json"]
+                val customLayout = layoutJson?.let {
+                    try {
+                        kotlinx.serialization.json.Json.decodeFromString<List<com.abtsplazita.posplazita.domain.TicketElement>>(it)
+                    } catch (e: Exception) { null }
+                }
+
+                _ticketConfig.value = TicketConfig(
+                    logoPath = settings["ticket_logo_path"],
+                    facebook = settings["ticket_facebook"],
+                    instagram = settings["ticket_instagram"],
+                    whatsapp = settings["ticket_whatsapp"],
+                    thanksMessage = settings["ticket_thanks_message"] ?: "Gracias por su compra!",
+                    branchAddress = settings["ticket_branch_address"],
+                    branchPhone = settings["ticket_branch_phone"],
+                    showBranchInfo = settings["ticket_show_branch"]?.toBoolean() ?: true,
+                    ticketIdPrefix = settings["ticket_id_prefix"] ?: "S",
+                    layout = customLayout ?: TicketConfig.defaultLayout
+                )
+                
+                _branchName.value = settings["${branchId}_name"] ?: ""
+
+                // Configuración de Mayoreo Automático
+                val wholesaleEnabled = settings["${branchId}_wholesale_enabled"]?.toBoolean() ?: false
+                currentSaleManager.setWholesaleEnabled(wholesaleEnabled)
+
+                // Restaurar configuración de "Agregar al principio" y "Permitir inventario negativo"
+                val addAtTopEnabled = settings["${branchId}_add_at_top"]?.toBoolean() ?: false
+                currentSaleManager.setAddAtTop(addAtTopEnabled)
+                _addAtTop.value = addAtTopEnabled
+
+                val allowNegativeEnabled = settings["${branchId}_allow_negative_stock"]?.toBoolean() ?: false
+                currentSaleManager.setAllowNegativeStock(allowNegativeEnabled)
+                _allowNegativeStock.value = allowNegativeEnabled
+            }
+        }
+        startWebOrdersObservation()
+        startDeletionRequestsObservation()
+        startDeletionLogsObservation()
+        viewModelScope.launch {
+            combine(
+                _selectedTerminal, 
+                saleRepository.getSales(branchId), 
+                cashMovementRepository?.getMovements(branchId) ?: flowOf(emptyList()),
+                cashOutRepository?.getCashOuts(branchId) ?: flowOf(emptyList())
+            ) { terminal, allSales, allMovements, allCashOuts ->
+                if (terminal == null) 0.0
+                else {
+                    val lastCashOut = allCashOuts.filter { it.terminalId == terminal.id }.maxByOrNull { it.timestamp }
+                    val startTime = lastCashOut?.timestamp ?: 0L
+
+                    val salesCash = allSales.filter { it.terminalId == terminal.id && it.timestamp > startTime }.sumOf { it.cashAmount }
+                    val entriesCash = allMovements.filter { it.terminalId == terminal.id && it.timestamp > startTime && it.type == CashMovementType.IN }.sumOf { it.amount }
+                    val exitsCash = allMovements.filter { it.terminalId == terminal.id && it.timestamp > startTime && it.type == CashMovementType.OUT }.sumOf { it.amount }
+                    
+                    salesCash + entriesCash - exitsCash
+                }
+            }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { balance ->
+                _cashInDrawer.value = balance
+            }
+        }
+    }
 
     // --- Pedidos Web ---
     private val _webOrders = MutableStateFlow<List<WebOrder>>(emptyList())
@@ -787,8 +884,9 @@ class PosViewModel(
 
         if (hasPermission(Permission.CANCEL_SALE)) {
             action()
-        } else if (isRestricted(Permission.CANCEL_SALE)) {
-            // En lugar de pedir PIN, enviamos solicitud
+        } else {
+            // MODIFICACIÓN: Si no tiene permiso directo (Admin/Gerente), 
+            // siempre mandamos solicitud de borrado al administrador.
             viewModelScope.launch {
                 // Optimista: Bloquear botón de inmediato
                 _localPendingTicketIds.value += heldSale.id
@@ -811,8 +909,6 @@ class PosViewModel(
                 firebaseManager?.syncDeletionRequest(request)
                 setWarningMessage("Solicitud enviada a revisión del administrador.")
             }
-        } else {
-            setErrorMessage("No tienes permiso para eliminar ventas guardadas.")
         }
     }
 
@@ -898,7 +994,11 @@ class PosViewModel(
                 ticketConfig = _ticketConfig.value,
                 branchName = _branchName.value,
                 shouldPrint = shouldPrint,
-                onDone = onDone,
+                onDone = {
+                    // Limpiar datos de búsqueda al terminar la venta
+                    onSearchQueryClear()
+                    onDone()
+                },
                 onError = { setErrorMessage(it) }
             )
         }
@@ -958,8 +1058,12 @@ class PosViewModel(
                     branchId = branchId
                 )
                 deletionLogRepository?.saveLog(log)
+
+                // 3. Ejecutar el borrado real de la venta guardada (en local y nube)
+                saleRepository.deleteHeldSale(request.ticketId)
+                firebaseManager?.deleteHeldSale(request.ticketId)
                 
-                setWarningMessage("Borrado Exitoso: Ticket aprobado para eliminación.")
+                setWarningMessage("Borrado Exitoso: Ticket aprobado y eliminado.")
             } catch (e: Exception) {
                 setErrorMessage("Error al aprobar: ${e.message}")
             }
@@ -1052,7 +1156,18 @@ class PosViewModel(
 
         viewModelScope.launch {
             // 1. Intentar por código de barras exacto (Escaneo)
-            val exactMatch = repository.getProductByBarcode(query)
+            var exactMatch = repository.getProductByBarcode(query)
+            
+            // --- NUEVO: Si no existe localmente, buscar en la nube ---
+            if (exactMatch == null) {
+                val cloudProduct = firebaseManager?.fetchProductByBarcode(query)
+                if (cloudProduct != null) {
+                    // Guardar localmente para futuras consultas
+                    repository.syncProductBatch(listOf(cloudProduct))
+                    exactMatch = cloudProduct
+                }
+            }
+
             if (exactMatch != null) {
                 val mult = _searchMultiplier.value
                 if (mult != null) {
@@ -1352,11 +1467,19 @@ class PosViewModel(
     }
 
     fun setAllowNegativeStock(enabled: Boolean) {
+        _allowNegativeStock.value = enabled
         currentSaleManager.setAllowNegativeStock(enabled)
+        viewModelScope.launch {
+            settingsRepository?.saveSetting("${branchId}_allow_negative_stock", enabled.toString())
+        }
     }
 
     fun setAddAtTop(enabled: Boolean) {
+        _addAtTop.value = enabled
         currentSaleManager.setAddAtTop(enabled)
+        viewModelScope.launch {
+            settingsRepository?.saveSetting("${branchId}_add_at_top", enabled.toString())
+        }
     }
 
     // --- Caja y Movimientos ---
@@ -1469,13 +1592,15 @@ class PosViewModel(
     }
 
     fun refreshCatalog() {
+        setWarningMessage("Iniciando sincronización total del catálogo...")
         viewModelScope.launch {
             try {
-                repository.refreshProducts(isInitial = false)
-                repository.refreshInventory(branchId, isInitial = false)
-                setWarningMessage("Sincronización incremental completada.")
+                // Forzar descarga completa
+                repository.refreshProducts(isInitial = true)
+                repository.refreshInventory(branchId, isInitial = true)
+                setWarningMessage("Sincronización total completada con éxito.")
             } catch (e: Exception) {
-                setErrorMessage("Error al sincronizar: ${e.message}")
+                setErrorMessage("Error en sincronización: ${e.message}")
             }
         }
     }
@@ -1499,92 +1624,11 @@ class PosViewModel(
                     repository.searchProducts(query, limit = 50).collect { results ->
                         if (_searchQuery.value.text.isNotBlank()) {
                             _searchResults.value = results
-                            if (results.isNotEmpty() && !_showSearchResults.value && _currentFocusArea.value != FocusArea.CART) {
-                                _showSearchResults.value = true
-                                _currentFocusArea.value = FocusArea.SEARCH_RESULTS
-                                _selectedSearchIndex.value = 0
-                            }
+                            // MODIFICACIÓN: Ya no abrimos automáticamente la lista de resultados.
+                            // Obligamos a que el usuario presione ENTER para mostrar la lista o procesar código.
                         }
                     }
                 }
-        }
-    }
-
-    init {
-        startLiveSearch()
-        // Rotación automática del sidebar cada 10 segundos
-        viewModelScope.launch {
-            while (true) {
-                delay(10000)
-                val items = sidebarItems.value
-                if (items.isNotEmpty()) {
-                    _sidebarIndex.value = (_sidebarIndex.value + 1) % items.size
-                }
-            }
-        }
-        viewModelScope.launch {
-            promotionRepository?.getAllPromotions()?.collect { promos ->
-                val now = com.abtsplazita.posplazita.currentTimeMillis()
-                val currentPromos = promos.filter { 
-                    it.isActive && now >= it.startDate && now <= it.endDate 
-                }
-                _activePromotions.value = currentPromos
-                currentSaleManager.setPromotions(currentPromos)
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository?.getAllSettings()?.collect { settings ->
-                val layoutJson = settings["ticket_layout_json"]
-                val customLayout = layoutJson?.let {
-                    try {
-                        kotlinx.serialization.json.Json.decodeFromString<List<com.abtsplazita.posplazita.domain.TicketElement>>(it)
-                    } catch (e: Exception) { null }
-                }
-
-                _ticketConfig.value = TicketConfig(
-                    logoPath = settings["ticket_logo_path"],
-                    facebook = settings["ticket_facebook"],
-                    instagram = settings["ticket_instagram"],
-                    whatsapp = settings["ticket_whatsapp"],
-                    thanksMessage = settings["ticket_thanks_message"] ?: "Gracias por su compra!",
-                    branchAddress = settings["ticket_branch_address"],
-                    branchPhone = settings["ticket_branch_phone"],
-                    showBranchInfo = settings["ticket_show_branch"]?.toBoolean() ?: true,
-                    ticketIdPrefix = settings["ticket_id_prefix"] ?: "S",
-                    layout = customLayout ?: TicketConfig.defaultLayout
-                )
-                
-                _branchName.value = settings["${branchId}_name"] ?: ""
-
-                // Configuración de Mayoreo Automático
-                val wholesaleEnabled = settings["${branchId}_wholesale_enabled"]?.toBoolean() ?: false
-                currentSaleManager.setWholesaleEnabled(wholesaleEnabled)
-            }
-        }
-        startWebOrdersObservation()
-        startDeletionRequestsObservation()
-        startDeletionLogsObservation()
-        viewModelScope.launch {
-            combine(
-                _selectedTerminal, 
-                saleRepository.getSales(branchId), 
-                cashMovementRepository?.getMovements(branchId) ?: flowOf(emptyList()),
-                cashOutRepository?.getCashOuts(branchId) ?: flowOf(emptyList())
-            ) { terminal, allSales, allMovements, allCashOuts ->
-                if (terminal == null) 0.0
-                else {
-                    val lastCashOut = allCashOuts.filter { it.terminalId == terminal.id }.maxByOrNull { it.timestamp }
-                    val startTime = lastCashOut?.timestamp ?: 0L
-
-                    val salesCash = allSales.filter { it.terminalId == terminal.id && it.timestamp > startTime }.sumOf { it.cashAmount }
-                    val entriesCash = allMovements.filter { it.terminalId == terminal.id && it.timestamp > startTime && it.type == CashMovementType.IN }.sumOf { it.amount }
-                    val exitsCash = allMovements.filter { it.terminalId == terminal.id && it.timestamp > startTime && it.type == CashMovementType.OUT }.sumOf { it.amount }
-                    
-                    salesCash + entriesCash - exitsCash
-                }
-            }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { balance ->
-                _cashInDrawer.value = balance
-            }
         }
     }
 }

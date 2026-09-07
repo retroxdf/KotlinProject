@@ -56,7 +56,7 @@ fun PeripheralSettingsScreen(
         }
         "productos_conf" -> ProductSettingsSubMenu(viewModel, productRepository, onBack = { currentSubMenu = null }, onNavigate = { currentSubMenu = it })
         "categorias" -> CategoryManagementSubMenu(viewModel, productRepository, onBack = { currentSubMenu = "productos_conf" })
-        "operatividad" -> OperativitySubMenu(viewModel, onBack = { currentSubMenu = null })
+        "operatividad" -> OperativitySubMenu(viewModel, posViewModel, onBack = { currentSubMenu = null })
         "ticket" -> TicketSettingsSubMenu(viewModel, onBack = { currentSubMenu = null }, onNavigate = { currentSubMenu = it })
         "punto_venta" -> PosAppSubMenu(viewModel, onBack = { currentSubMenu = null })
         "promociones" -> PromotionsSubMenu(promotionViewModel, onBack = { currentSubMenu = null })
@@ -621,11 +621,12 @@ fun CategoryManagementSubMenu(viewModel: PeripheralViewModel, repository: Produc
 }
 
 @Composable
-fun OperativitySubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) {
+fun OperativitySubMenu(viewModel: PeripheralViewModel, posViewModel: PosViewModel, onBack: () -> Unit) {
     val allowNegativeStock by viewModel.allowNegativeStock.collectAsState()
     val askQty by viewModel.askQuantityOnAdd.collectAsState()
     val addAtTop by viewModel.addAtTop.collectAsState()
     val wholesale by viewModel.isWholesaleEnabled.collectAsState()
+    val scope = rememberCoroutineScope()
 
     SubMenuLayout(title = "Operatividad", onBack = onBack) {
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -637,6 +638,21 @@ fun OperativitySubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) {
                 SwitchSettingItem("Agregar al inicio", "Los productos nuevos aparecen arriba de la lista", addAtTop, { viewModel.toggleAddAtTop(it) })
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 SwitchSettingItem("Habilitar Mayoreo", "Activar cambios automáticos de precio por volumen", wholesale, { viewModel.toggleWholesale(it) })
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                
+                Button(
+                    onClick = { 
+                        scope.launch {
+                            posViewModel.refreshCatalog() // Esto ahora llamará a una versión más robusta
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                ) {
+                    Icon(Icons.Default.Sync, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("FORZAR SINCRONIZACIÓN TOTAL")
+                }
             }
         }
     }
@@ -1172,7 +1188,7 @@ fun PosAppSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) {
 @Composable
 fun OperationSettingsSubMenu(viewModel: PeripheralViewModel, posViewModel: PosViewModel, onBack: () -> Unit) {
     // Redirigir o mantener por compatibilidad
-    OperativitySubMenu(viewModel, onBack)
+    OperativitySubMenu(viewModel, posViewModel, onBack)
 }
 
 @Composable

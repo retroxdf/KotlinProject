@@ -260,6 +260,13 @@ fun BranchMainLayout(
     val currentUser by authViewModel.currentUser.collectAsState()
     val allSettings by settingsRepository.getAllSettings().collectAsState(emptyMap())
 
+    LaunchedEffect(currentUser, userPermissions, posViewModel) {
+        posViewModel.setUserInfo(currentUser, userPermissions)
+        if (currentUser != null) {
+            syncManager.setUserInfo(currentUser!!.username)
+        }
+    }
+
     var currentScreen by remember { mutableStateOf("pos") }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -370,15 +377,15 @@ fun BranchMainLayout(
                                     }
                                 }
                                 when (event.key) {
-                                    Key.F1 -> if (currentScreen != "pos") { currentScreen = "pos"; true } else false
+                                    Key.F1 -> if (currentScreen != "pos" && currentScreen != "checkout") { currentScreen = "pos"; true } else false
                                     Key.F2 -> if (currentScreen != "customers") { customerViewModel.selectCustomer(null); currentScreen = "customers"; true } else false
                                     Key.F3 -> if (currentScreen != "products") { prodVM.resetToCatalog(); currentScreen = "products"; true } else false
-                                    Key.F4 -> if (currentScreen != "purchases") { currentScreen = "purchases"; true } else false
+                                    Key.F4 -> if (currentScreen != "purchases" && currentScreen != "checkout") { currentScreen = "purchases"; true } else false
                                     Key.F5 -> if (currentScreen == "pos") { posViewModel.clearSale(); true } else { currentScreen = "inventory"; true }
                                     Key.F8 -> if (currentScreen != "history") { currentScreen = "history"; true } else false
                                     Key.F10 -> if (currentScreen != "settings") { currentScreen = "settings"; true } else false
                                     Key.F11 -> if (currentScreen != "cash_out") { currentScreen = "cash_out"; true } else false
-                                    Key.F12 -> if (currentScreen != "dashboard") { currentScreen = "dashboard"; true } else false
+                                    Key.F12 -> if (currentScreen != "dashboard" && currentScreen != "checkout") { currentScreen = "dashboard"; true } else false
                                     else -> false
                                 }
                             } else false

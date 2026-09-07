@@ -168,11 +168,26 @@ class JvmCloudProvider : CloudProvider {
     }
 
     private suspend fun listDocuments(collection: String): List<JsonObject> {
-        return try {
-            val url = "$baseUrl/$collection"
-            val response: JsonObject = httpClient.get(url) { authHeader() }.body()
-            response["documents"]?.jsonArray?.mapNotNull { it.jsonObject.fromFirestoreFields() } ?: emptyList()
-        } catch (e: Exception) { emptyList() }
+        val allDocs = mutableListOf<JsonObject>()
+        var pageToken: String? = null
+        
+        do {
+            try {
+                val url = if (pageToken == null) "$baseUrl/$collection" else "$baseUrl/$collection?pageToken=$pageToken"
+                val response: JsonObject = httpClient.get(url) { authHeader() }.body()
+                
+                response["documents"]?.jsonArray?.forEach { 
+                    allDocs.add(it.jsonObject.fromFirestoreFields())
+                }
+                
+                pageToken = response["nextPageToken"]?.jsonPrimitive?.content
+            } catch (e: Exception) {
+                println("CLOUD_JVM_LIST_ERROR [$collection]: ${e.message}")
+                pageToken = null
+            }
+        } while (pageToken != null)
+        
+        return allDocs
     }
 
     // --- Implementación de CloudProvider ---
@@ -291,12 +306,22 @@ class JvmCloudProvider : CloudProvider {
         scope.launch { while(true) { onUpdate(fetchTerminals(branchId)); delay(PULSE_NORMAL) } }
     }
 
-    override fun syncHeldSale(heldSale: HeldSale) {}
-    override fun deleteHeldSale(id: String) {}
-    override fun observeHeldSales(branchId: String, onUpdate: (List<HeldSale>) -> Unit) {}
+    override fun syncHeldSale(heldSale: HeldSale) {
+        scope.launch { patchDocument("held_sales", heldSale.id, Json.encodeToJsonElement(heldSale).jsonObject) }
+    }
+    override fun deleteHeldSale(id: String) {
+        scope.launch { deleteDocument("held_sales", id) }
+    }
+    override fun observeHeldSales(branchId: String, onUpdate: (List<HeldSale>) -> Unit) {
+        scope.launch { while(true) { onUpdate(queryDocuments("held_sales", branchId).map { Json.decodeFromJsonElement(it) }); delay(PULSE_FAST) } }
+    }
 
-    override fun syncReturn(productReturn: ProductReturn) {}
-    override fun observeReturns(branchId: String, onUpdate: (List<ProductReturn>) -> Unit) {}
+    override fun syncReturn(productReturn: ProductReturn) {
+        scope.launch { patchDocument("returns", productReturn.id, Json.encodeToJsonElement(productReturn).jsonObject) }
+    }
+    override fun observeReturns(branchId: String, onUpdate: (List<ProductReturn>) -> Unit) {
+        scope.launch { while(true) { onUpdate(queryDocuments("returns", branchId).map { Json.decodeFromJsonElement(it) }); delay(PULSE_NORMAL) } }
+    }
 
     override fun syncCashOut(cashOut: CashOut) {
         scope.launch { patchDocument("cash_outs", cashOut.id, Json.encodeToJsonElement(cashOut).jsonObject) }
@@ -512,6 +537,35 @@ class JvmCloudProvider : CloudProvider {
             null
         }
     }
+
+    override suspend fun fetchProductByBarcode(barcode: String): Product? {
+        return try {
+            // Consulta en Firestore REST API
+            val response = httpClient.post("$baseUrl:runQuery") {
+                authHeader()
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("structuredQuery", buildJsonObject {
+                        put("from", buildJsonArray { add(buildJsonObject { put("collectionId", "products") }) })
+                        put("where", buildJsonObject {
+                            put("fieldFilter", buildJsonObject {
+                                put("field", buildJsonObject { put("fieldPath", "barcode") })
+                                put("op", "EQUAL")
+                                put("value", buildJsonObject { put("stringValue", barcode) })
+                            })
+                        })
+                        put("limit", 1)
+                    })
+                })
+            }.body<JsonArray>()
+
+            if (response.isNotEmpty()) {
+                val doc = response[0].jsonObject["document"]?.jsonObject ?: return null
+                return Json.decodeFromJsonElement<Product>(doc.fromFirestoreFields())
+            }
+            null
+        } catch (e: Exception) { null }
+    }
     
     private suspend fun queryIncremental(
         collection: String, 
@@ -567,11 +621,12 @@ class JvmCloudProvider : CloudProvider {
                         if (limit != null) put("limit", limit)
                         if (offset != null) put("offset", offset)
                         
-                        // Ordenar por lastUpdated para que el offset tenga sentido
+                        // MODIFICACIÓN: Usar ASCENDING para que la sincronización incremental
+                        // no se salte documentos si el resultado es limitado.
                         put("orderBy", buildJsonArray {
                             add(buildJsonObject {
                                 put("field", buildJsonObject { put("fieldPath", "lastUpdated") })
-                                put("direction", "DESCENDING")
+                                put("direction", "ASCENDING")
                             })
                         })
                     })

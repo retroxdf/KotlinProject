@@ -719,6 +719,19 @@ class AndroidCloudProvider : CloudProvider {
             if (doc.exists) doc.data(com.abtsplazita.posplazita.domain.AppUpdateInfo.serializer()) else null
         } catch (e: Exception) { null }
     }
+
+    override suspend fun fetchProductByBarcode(barcode: String): Product? {
+        return try {
+            // Buscamos en el campo 'barcode' y los secundarios para mayor precisión
+            val query1 = firestore.collection("products").where { "barcode" equalTo barcode }.limit(1).get()
+            if (query1.documents.isNotEmpty()) return query1.documents.first().data(Product.serializer())
+
+            val query2 = firestore.collection("products").where { "barcode2" equalTo barcode }.limit(1).get()
+            if (query2.documents.isNotEmpty()) return query2.documents.first().data(Product.serializer())
+
+            null
+        } catch (e: Exception) { null }
+    }
 }
 
 actual fun getCloudProvider(): CloudProvider = AndroidCloudProvider()

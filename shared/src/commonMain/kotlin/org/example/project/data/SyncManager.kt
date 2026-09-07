@@ -108,14 +108,19 @@ class SyncManager(
             }
         }
 
-        // 3. Tarea de Descarga de Productos cada 1 hora
+        // 3. Tarea de Descarga de Productos e Inventario cada 1 hora
         periodic1hJob = scope.launch {
             while (isActive) {
                 delay(1.hours)
-                println("SYNC_MANAGER: Actualizando catálogo de productos (1h)...")
+                println("SYNC_MANAGER: Sincronizando catálogo e inventario (1h)...")
                 try {
                     productRepository.refreshProducts(isInitial = false)
-                } catch (e: Exception) {}
+                    if (currentBranchId != null) {
+                        productRepository.refreshInventory(currentBranchId!!, isInitial = false)
+                    }
+                } catch (e: Exception) {
+                    println("SYNC_MANAGER_ERROR: ${e.message}")
+                }
             }
         }
 
