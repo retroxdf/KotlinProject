@@ -167,7 +167,12 @@ class HistoryViewModel(
             flowOf(emptyList())
         }
     }.onEach { terminals ->
-        if (_selectedTerminalId.value != null && terminals.none { it.id == _selectedTerminalId.value }) {
+        // Auto-seleccionar si solo hay una caja
+        if (_selectedTerminalId.value == null && terminals.size == 1) {
+            _selectedTerminalId.value = terminals.first().id
+        }
+
+        if (terminals.isNotEmpty() && _selectedTerminalId.value != null && terminals.none { it.id == _selectedTerminalId.value }) {
             _selectedTerminalId.value = null
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

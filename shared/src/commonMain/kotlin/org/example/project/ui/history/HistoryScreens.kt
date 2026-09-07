@@ -997,13 +997,23 @@ fun CashOutScreen(
                 Text("RESUMEN DE MOVIMIENTOS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(16.dp))
                 
-                Card(colors = CardDefaults.cardColors(containerColor = Color.Gray.copy(alpha = 0.05f))) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DetailRow("Ventas en Efectivo", "$${totalCashSales.formatPrice()}", color = Color(0xFF2E7D32))
-                        DetailRow("Entradas de Dinero", "+$${totalIn.formatPrice()}", color = Color(0xFF2E7D32))
-                        DetailRow("Salidas de Dinero", "-$${totalOut.formatPrice()}", color = Color.Red)
-                        HorizontalDivider()
-                        DetailRow("TOTAL ESPERADO", "$${expectedAmount.formatPrice()}", isBold = true, color = Color(0xFF0056A0))
+                if (selectedTerminalId == null) {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Store, null, modifier = Modifier.size(48.dp), tint = Color.LightGray)
+                            Spacer(Modifier.height(8.dp))
+                            Text("SELECCIONE UNA CAJA PARA VER EL CORTE", color = Color.Gray, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        }
+                    }
+                } else {
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.Gray.copy(alpha = 0.05f))) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            DetailRow("Ventas en Efectivo", "$${totalCashSales.formatPrice()}", color = Color(0xFF2E7D32))
+                            DetailRow("Entradas de Dinero", "+$${totalIn.formatPrice()}", color = Color(0xFF2E7D32))
+                            DetailRow("Salidas de Dinero", "-$${totalOut.formatPrice()}", color = Color.Red)
+                            HorizontalDivider()
+                            DetailRow("TOTAL ESPERADO", "$${expectedAmount.formatPrice()}", isBold = true, color = Color(0xFF0056A0))
+                        }
                     }
                 }
 

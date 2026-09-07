@@ -259,12 +259,25 @@ fun BranchMainLayout(
     val userPermissions by authViewModel.userPermissions.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
     val allSettings by settingsRepository.getAllSettings().collectAsState(emptyMap())
+    val selectedTerminal by posViewModel.selectedTerminal.collectAsState()
 
     LaunchedEffect(currentUser, userPermissions, posViewModel) {
         posViewModel.setUserInfo(currentUser, userPermissions)
         if (currentUser != null) {
             syncManager.setUserInfo(currentUser!!.username)
         }
+    }
+
+    LaunchedEffect(selectedTerminal, historyViewModel) {
+        historyViewModel.filterByTerminal(selectedTerminal?.id)
+    }
+
+    LaunchedEffect(currentUser, historyViewModel) {
+        historyViewModel.setCurrentUser(currentUser)
+    }
+    
+    LaunchedEffect(branchId, historyViewModel) {
+        historyViewModel.filterByBranch(branchId)
     }
 
     var currentScreen by remember { mutableStateOf("pos") }
