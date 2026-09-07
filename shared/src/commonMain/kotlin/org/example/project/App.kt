@@ -142,6 +142,46 @@ fun AppContent() {
 
     var selectedBranch by remember { mutableStateOf<Branch?>(null) }
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+    val currentUser by authViewModel.currentUser.collectAsState()
+
+    // Auto-seleccionar sucursal si la sucursal está fijada o por rol del usuario
+    LaunchedEffect(isLoggedIn, currentUser) {
+        if (isLoggedIn && currentUser != null && selectedBranch == null) {
+            // 1. Revisar si la sucursal está fijada en este dispositivo (Máxima prioridad)
+            val isFixed = settingsRepository.getSetting("app_is_branch_fixed") == "true"
+            if (isFixed) {
+                val fixedId = settingsRepository.getSetting("app_fixed_branch_id")
+                if (fixedId != null) {
+                    try {
+                        val allBranches = branchRepository.getAllBranches().first()
+                        val fixedBranch = allBranches.find { it.id == fixedId }
+                        if (fixedBranch != null) {
+                            selectedBranch = fixedBranch
+                            return@LaunchedEffect
+                        }
+                    } catch (e: Exception) {}
+                }
+            }
+
+            // 2. Si no está fijada, auto-seleccionar por rol del empleado (Solo para Cajeros/Operativos)
+            val role = currentUser!!.role
+            if (role != Role.SUPER_ADMIN && role != Role.GERENTE) {
+                val empId = currentUser!!.employeeId
+                if (empId != null) {
+                    try {
+                        val employee = employeeRepository.getEmployeeById(empId)
+                        if (employee != null) {
+                            val allBranches = branchRepository.getAllBranches().first()
+                            val myBranch = allBranches.find { it.id == employee.branch || it.name == employee.branch }
+                            if (myBranch != null) {
+                                selectedBranch = myBranch
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
+            }
+        }
+    }
     
     if (!isLoggedIn) {
         LoginScreen(authViewModel, "")
@@ -285,12 +325,16 @@ fun BranchMainLayout(
     val scope = rememberCoroutineScope()
     val mainFocusRequester = remember { FocusRequester() }
 
+    val isBranchFixed by branchPeripheralViewModel.isBranchFixed.collectAsState()
+
     val navigationItems = listOf(
         NavigationItem("pos", "Venta", Icons.Default.ShoppingCart, "F1", Permission.MAKE_SALE),
         NavigationItem("customers", "Clientes", Icons.Default.People, "F2", Permission.CUSTOMER_VIEW),
         NavigationItem("products", "Productos", Icons.AutoMirrored.Filled.List, "F3", Permission.PRODUCT_VIEW),
         NavigationItem("purchases", "Compras", Icons.Default.AddShoppingCart, "F4", Permission.MANAGE_PURCHASES),
         NavigationItem("inventory", "Inventario", Icons.Default.Star, "F5", Permission.PRODUCT_VIEW),
+        NavigationItem("suppliers", "Proveedores", Icons.Default.Business, permission = Permission.SUPPLIER_VIEW),
+        NavigationItem("users", "Usuarios", Icons.Default.Group, permission = Permission.MANAGE_USERS),
         NavigationItem("history", "Consultas", Icons.Default.Assessment, "F8", Permission.VIEW_REPORTS),
         NavigationItem("contabilidad", "Contabilidad", Icons.Default.Payments, "F9", permission = Permission.VIEW_ACCOUNTING),
         NavigationItem("settings", "Ajustes", Icons.Default.Settings, "F10", Permission.MANAGE_SETTINGS),
@@ -299,13 +343,20 @@ fun BranchMainLayout(
         NavigationItem("change_branch", "Sucursal", Icons.Default.SyncAlt, permission = Permission.MANAGE_SETTINGS),
     ).filter { item ->
         if (item.id == "change_branch") {
+            // Ocultar si la sucursal está fijada en este dispositivo (Máxima prioridad)
+            if (isBranchFixed) return@filter false
+
             val isLocked = allSettings["app_lock_branch_change"] == "true"
             if (isLocked && currentUser?.role != Role.SUPER_ADMIN) return@filter false
             return@filter currentUser?.role == Role.SUPER_ADMIN || currentUser?.role == Role.GERENTE
         }
         val p = item.permission
         if (p == null) true
-        else (userPermissions[p] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED
+        else {
+            val isManagement = currentUser?.role == Role.SUPER_ADMIN || currentUser?.role == Role.GERENTE
+            if (isManagement) true 
+            else (userPermissions[p] ?: PermissionLevel.DISABLED) != PermissionLevel.DISABLED
+        }
     }
 
     BoxWithConstraints {
@@ -342,25 +393,27 @@ fun BranchMainLayout(
                         },
                         navigationIcon = { IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, "Menú") } },
                         actions = {
-                            if (currentScreen == "pos" && !isCompact) {
-                                PosActionIcons(posViewModel)
-                            }
-                            IconButton(onClick = { posViewModel.refreshCatalog() }) { Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.primary) }
-                            Box {
-                                var showMenu by remember { mutableStateOf(false) }
-                                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Opciones") }
-                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                    if (isCompact && currentScreen == "pos") {
-                                        PosMenuContent(posViewModel) { showMenu = false }
+                            if (currentScreen == "pos") {
+                                if (!isCompact) {
+                                    PosActionIcons(posViewModel)
+                                }
+                                Box {
+                                    var showMenu by remember { mutableStateOf(false) }
+                                    IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Opciones") }
+                                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                        if (isCompact) {
+                                            PosMenuContent(posViewModel) { showMenu = false }
+                                            HorizontalDivider()
+                                        }
+                                        DropdownMenuItem(text = { Text("Comentarios Ticket (Alt+P)") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.Notes, null, tint = Color(0xFF2196F3)) }, onClick = { showMenu = false; posViewModel.openCommentDialog() })
+                                        DropdownMenuItem(text = { Text("Realizar Precorte (Alt+K)") }, leadingIcon = { Icon(Icons.Default.Analytics, null, tint = Color(0xFF2196F3)) }, onClick = { showMenu = false; posViewModel.openPreCutDialog() })
                                         HorizontalDivider()
+                                        DropdownMenuItem(text = { Text("Abrir Cajón (Alt+N)") }, leadingIcon = { Icon(Icons.Default.LockOpen, null, tint = Color.Gray) }, onClick = { showMenu = false; posViewModel.openCashDrawer() })
+                                        DropdownMenuItem(text = { Text("Limpiar Venta (F5)") }, leadingIcon = { Icon(Icons.Default.DeleteSweep, null, tint = Color.Red) }, onClick = { showMenu = false; posViewModel.clearSale() })
                                     }
-                                    DropdownMenuItem(text = { Text("Comentarios Ticket (Alt+P)") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.Notes, null, tint = Color(0xFF2196F3)) }, onClick = { showMenu = false; posViewModel.openCommentDialog() })
-                                    DropdownMenuItem(text = { Text("Realizar Precorte (Alt+K)") }, leadingIcon = { Icon(Icons.Default.Analytics, null, tint = Color(0xFF2196F3)) }, onClick = { showMenu = false; posViewModel.openPreCutDialog() })
-                                    HorizontalDivider()
-                                    DropdownMenuItem(text = { Text("Abrir Cajón (Alt+N)") }, leadingIcon = { Icon(Icons.Default.LockOpen, null, tint = Color.Gray) }, onClick = { showMenu = false; posViewModel.openCashDrawer() })
-                                    DropdownMenuItem(text = { Text("Limpiar Venta (F5)") }, leadingIcon = { Icon(Icons.Default.DeleteSweep, null, tint = Color.Red) }, onClick = { showMenu = false; posViewModel.clearSale() })
                                 }
                             }
+                            IconButton(onClick = { posViewModel.refreshCatalog() }) { Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.primary) }
                         }
                     )
                 }

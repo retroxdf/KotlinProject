@@ -76,6 +76,9 @@ class PeripheralViewModel(
     private val _lockBranchChange = MutableStateFlow(false)
     val lockBranchChange = _lockBranchChange.asStateFlow()
 
+    private val _isBranchFixed = MutableStateFlow(false)
+    val isBranchFixed = _isBranchFixed.asStateFlow()
+
     private val _maxCashLimit = MutableStateFlow(5000.0) // Límite para retiro parcial
     val maxCashLimit = _maxCashLimit.asStateFlow()
 
@@ -155,6 +158,7 @@ class PeripheralViewModel(
 
                 settings["app_auto_branch_login"]?.let { _autoBranchLogin.value = it.toBoolean() }
                 settings["app_lock_branch_change"]?.let { _lockBranchChange.value = it.toBoolean() }
+                settings["app_is_branch_fixed"]?.let { _isBranchFixed.value = it.toBoolean() }
                 settings["${branchId}_max_cash_limit"]?.let { _maxCashLimit.value = it.toDoubleOrNull() ?: 5000.0 }
                 settings["app_logo_url"]?.let { _appLogoUrl.value = it }
                 
@@ -294,6 +298,14 @@ class PeripheralViewModel(
     fun toggleLockBranchChange(lock: Boolean) {
         _lockBranchChange.value = lock
         saveSetting("app_lock_branch_change", lock.toString())
+    }
+
+    fun toggleBranchFix(fixed: Boolean) {
+        _isBranchFixed.value = fixed
+        saveSetting("app_is_branch_fixed", fixed.toString())
+        if (fixed) {
+            saveSetting("app_fixed_branch_id", branchId)
+        }
     }
 
     fun updateMaxCashLimit(limit: Double) {

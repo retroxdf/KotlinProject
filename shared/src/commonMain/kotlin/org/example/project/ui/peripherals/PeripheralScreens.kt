@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import com.abtsplazita.posplazita.domain.*
 import com.abtsplazita.posplazita.domain.DeletionLog
 import com.abtsplazita.posplazita.ui.users.UserViewModel
+import com.abtsplazita.posplazita.ui.users.UserModule
 import kotlinx.coroutines.launch
 import kotlinx.datetime.*
 import androidx.compose.ui.text.style.TextAlign
@@ -70,6 +71,9 @@ fun PeripheralSettingsScreen(
         "whatsapp_ai" -> WhatsAppAiSubMenu(viewModel, onBack = { currentSubMenu = null })
         "firebase" -> FirebaseSettingsSubMenu(viewModel, onBack = { currentSubMenu = null })
         "contapla_settings" -> ContaplaSettingsSubMenu(onBack = { currentSubMenu = null })
+        "users_settings" -> SubMenuLayout(title = "Administrar Usuarios", onBack = { currentSubMenu = null }, scrollable = false) {
+            UserModule(userViewModel)
+        }
         else -> MainSettingsList(
             onNavigate = { currentSubMenu = it }
         )
@@ -124,6 +128,13 @@ fun MainSettingsList(onNavigate: (String) -> Unit) {
             icon = Icons.Default.AdminPanelSettings,
             color = Color(0xFFF44336),
             onClick = { onNavigate("roles") }
+        )
+        NavigationSettingCard(
+            title = "Usuarios",
+            subtitle = "Crear, editar y gestionar el personal",
+            icon = Icons.Default.Group,
+            color = Color(0xFF2196F3),
+            onClick = { onNavigate("users_settings") }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -237,6 +248,13 @@ fun MainSettingsList(onNavigate: (String) -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
         SettingsGroupHeader("Contabilidad y Personal")
+        NavigationSettingCard(
+            title = "Usuarios",
+            subtitle = "Crear, editar y asignar roles al personal",
+            icon = Icons.Default.Group,
+            color = Color(0xFF2196F3),
+            onClick = { onNavigate("users") }
+        )
         NavigationSettingCard(
             title = "Ajustes Contapla",
             subtitle = "Parámetros de nómina y caja contable",
@@ -1136,6 +1154,7 @@ fun LoyaltySubMenu(viewModel: PeripheralViewModel, repository: ProductRepository
 fun PosAppSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) {
     val autoLogin by viewModel.autoBranchLogin.collectAsState()
     val lockBranch by viewModel.lockBranchChange.collectAsState()
+    val isFixed by viewModel.isBranchFixed.collectAsState()
     val maxCash by viewModel.maxCashLimit.collectAsState()
     val isWebshopEnabled by viewModel.isWebshopEnabled.collectAsState()
 
@@ -1147,6 +1166,8 @@ fun PosAppSubMenu(viewModel: PeripheralViewModel, onBack: () -> Unit) {
                 SwitchSettingItem("Auto-inicio en sucursal", "Entrar directo a la sucursal actual al abrir", autoLogin, { viewModel.toggleAutoBranchLogin(it) })
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 SwitchSettingItem("Bloquear cambio de sucursal", "Solo el administrador puede cambiar de tienda", lockBranch, { viewModel.toggleLockBranchChange(it) })
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                SwitchSettingItem("Fijar esta sucursal", "Todos los usuarios entrarán directo a este local", isFixed, { viewModel.toggleBranchFix(it) })
             }
         }
 
